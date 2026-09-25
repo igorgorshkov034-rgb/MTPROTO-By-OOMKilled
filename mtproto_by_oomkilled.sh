@@ -17,6 +17,8 @@ BRANDING_FILE="$INSTALL_DIR/branding.json"
 VPN_STORAGE_DIR="$INSTALL_DIR/vpn_configs"
 META_FILE="/etc/mtproto_oomkilled.conf"
 BACKUP_DIR="/var/backups/mtproto_oomkilled"
+SSL_CERT="$INSTALL_DIR/cert.pem"
+SSL_KEY="$INSTALL_DIR/key.pem"
 GITHUB_REPO_URL="https://raw.githubusercontent.com/igorgorshkov034-rgb/MTPROTO-By-OOMKilled/refs/heads/main/mtproto_by_oomkilled.sh"
 
 check_root() {
@@ -24,6 +26,48 @@ check_root() {
         echo -e "\e[31m[ERROR] Скрипт должен запускаться с правами root (sudo)!\e[0m"
         exit 1
     fi
+}
+
+generate_self_signed_ssl() {
+    echo "Генерация самоподписанного SSL-сертификата..."
+    mkdir -p "$INSTALL_DIR"
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$SSL_KEY" \
+        -out "$SSL_CERT" \
+        -subj "/CN=OOMKilled-Portal/O=OOMKilled/C=NL" >/dev/null 2>&1
+    chmod 600 "$SSL_KEY"
+    chmod 644 "$SSL_CERT"
+}
+
+update_systemd_service() {
+    local use_ssl="false"
+    if [[ -f "$META_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$META_FILE"
+        use_ssl="${USE_SSL:-false}"
+    fi
+
+    local ssl_flags=""
+    if [[ "$use_ssl" == "true" && -f "$SSL_CERT" && -f "$SSL_KEY" ]]; then
+        ssl_flags="--ssl-keyfile $SSL_KEY --ssl-certfile $SSL_CERT"
+    fi
+
+    cat <<EOF > "$WEB_SERVICE"
+[Unit]
+Description=OOMKilled Web Portal
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$INSTALL_DIR/venv/bin/uvicorn web_panel:app --host 0.0.0.0 --port $WEB_PORT $ssl_flags
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
 }
 
 write_app_modules() {
@@ -84,7 +128,7 @@ if __name__ == "__main__":
         time.sleep(30)
 EOF
 
-    # Веб-панель управления и обновленная страница клиента в стиле Glassmorphism
+    # Веб-панель управления и страница клиента (Glassmorphism UI)
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
 import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
@@ -372,7 +416,6 @@ def subscription_page(token: str):
             overflow-x: hidden;
         }}
 
-        /* Неоновые фоновые сферы для Glassmorphism */
         .ambient-bg-1 {{
             position: fixed;
             width: 320px;
@@ -441,7 +484,6 @@ def subscription_page(token: str):
         .badge-paused {{ background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
         .badge-expired {{ background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
 
-        /* Прогресс-бар */
         .progress-box {{
             margin: 18px 0 20px 0;
             background: rgba(255, 255, 255, 0.03);
@@ -469,7 +511,6 @@ def subscription_page(token: str):
             transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }}
 
-        /* Кнопки */
         .glass-btn {{
             display: flex;
             align-items: center;
@@ -517,7 +558,6 @@ def subscription_page(token: str):
             border: 1px solid rgba(255, 255, 255, 0.04);
         }}
 
-        /* Внутренние стеклянные карточки */
         .glass-subcard {{
             background: rgba(0, 0, 0, 0.28);
             border: 1px solid rgba(255, 255, 255, 0.06);
@@ -550,7 +590,6 @@ def subscription_page(token: str):
         }}
         .btn-copy:hover {{ background: rgba(56, 189, 248, 0.3); }}
 
-        /* Список файлов */
         .vpn-item {{
             display: flex;
             justify-content: space-between;
@@ -581,7 +620,6 @@ def subscription_page(token: str):
             font-weight: 600;
         }}
 
-        /* Вкладки */
         .tabs {{
             display: flex;
             gap: 6px;
@@ -613,7 +651,6 @@ def subscription_page(token: str):
         }}
         .tab-content.active {{ display: block; }}
 
-        /* Всплывающий тост */
         .toast {{
             position: fixed;
             bottom: 24px;
@@ -655,7 +692,6 @@ def subscription_page(token: str):
             </div>
         </div>
 
-        <!-- Прогресс-бар срока подписки -->
         <div class="progress-box">
             <div class="progress-meta">
                 <span>Срок действия</span>
@@ -682,7 +718,6 @@ def subscription_page(token: str):
         <div id="tab-desktop" class="tab-content">{desktop_text}</div>
     </div>
 
-    <!-- Всплывающий тост вместо alert -->
     <div id="toast" class="toast">
         <span style="color:#10b981;">✓</span> Ключ скопирован в буфер обмена
     </div>
@@ -722,6 +757,8 @@ def dashboard(user: str = Depends(auth_user)):
     branding = get_branding()
     web_port = int(meta.get("WEB_PORT", 8080))
     ip = meta.get("IP", "127.0.0.1")
+    use_ssl = (meta.get("USE_SSL", "false") == "true")
+    protocol = "https" if use_ssl else "http"
 
     cpu_usage = psutil.cpu_percent(interval=0.1)
     ram_usage = psutil.virtual_memory().percent
@@ -734,7 +771,7 @@ def dashboard(user: str = Depends(auth_user)):
         proxy_url = u_info.get("proxy_url", "")
         custom_key = u_info.get("custom_key", "")
         sub_token = u_info.get("sub_token", "")
-        sub_url = f"http://{ip}:{web_port}/sub/{sub_token}"
+        sub_url = f"{protocol}://{ip}:{web_port}/sub/{sub_token}"
 
         exp = u_info.get("expires_at", 0)
         u_status = u_info.get("status", "active")
@@ -841,6 +878,8 @@ def dashboard(user: str = Depends(auth_user)):
         </div>
         """
 
+    ssl_status_badge = "<span style='color:#10b981; font-weight:bold;'>HTTPS (SSL включен)</span>" if use_ssl else "<span style='color:#f59e0b;'>HTTP (без SSL)</span>"
+
     html = f"""<!DOCTYPE html>
     <html lang="ru">
     <head>
@@ -909,6 +948,7 @@ def dashboard(user: str = Depends(auth_user)):
             <div id="section-users" class="menu-section active">
                 <div class="grid">
                     <div class="stat-box"><div>Всего пользователей</div><div class="stat-val">{len(users)}</div></div>
+                    <div class="stat-box"><div>Режим сети</div><div class="stat-val" style="font-size:14px; margin-top:8px;">{ssl_status_badge}</div></div>
                     <div class="stat-box"><div>Нагрузка CPU</div><div class="stat-val">{cpu_usage}%</div></div>
                     <div class="stat-box"><div>Использование ОЗУ</div><div class="stat-val">{ram_usage}%</div></div>
                 </div>
@@ -1089,6 +1129,45 @@ def delete_user(username: str = Form(...), user: str = Depends(auth_user)):
 EOF
 }
 
+toggle_ssl_menu() {
+    echo -e "\n\e[34m=== Настройка самоподписанного SSL (HTTPS) ===\e[0m"
+    local current_ssl="false"
+    if [[ -f "$META_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$META_FILE"
+        current_ssl="${USE_SSL:-false}"
+    fi
+
+    echo -e "Текущий статус: \e[33m$([[ "$current_ssl" == "true" ]] && echo "ВКЛЮЧЕН (HTTPS)" || echo "ВЫКЛЮЧЕН (HTTP)")\e[0m"
+    echo "1) Включить самоподписанный SSL (HTTPS)"
+    echo "2) Отключить SSL (вернуться на HTTP)"
+    echo "0) Назад"
+    read -rp "Выберите действие [0-2]: " SSL_CHOICE
+
+    case "$SSL_CHOICE" in
+        1)
+            generate_self_signed_ssl
+            sed -i '/^USE_SSL=/d' "$META_FILE" 2>/dev/null || true
+            echo "USE_SSL=true" >> "$META_FILE"
+            update_systemd_service
+            systemctl restart mtproto-web.service
+            echo -e "\e[32m✔ Самоподписанный SSL успешно включен!\e[0m"
+            show_info
+            ;;
+        2)
+            sed -i '/^USE_SSL=/d' "$META_FILE" 2>/dev/null || true
+            echo "USE_SSL=false" >> "$META_FILE"
+            update_systemd_service
+            systemctl restart mtproto-web.service
+            echo -e "\e[33m✔ SSL отключен, панель переведена на HTTP.\e[0m"
+            show_info
+            ;;
+        *)
+            return
+            ;;
+    esac
+}
+
 if [[ "${1:-}" == "--upgrade-modules" ]]; then
     systemctl stop mtproto-proxy.service 2>/dev/null || true
     systemctl disable mtproto-proxy.service 2>/dev/null || true
@@ -1122,7 +1201,7 @@ if os.path.exists(p):
         with open(p, 'w') as f: json.dump(d, f, indent=2)
 " 2>/dev/null || true
 
-    systemctl daemon-reload
+    update_systemd_service
     systemctl restart mtproto-web.service mtproto-guardian.service
     exit 0
 fi
@@ -1156,6 +1235,7 @@ restore_backup() {
     echo "Восстановление файлов..."
     tar -xzf "$BACKUP_FILE" -C /
     systemctl daemon-reload
+    update_systemd_service
     systemctl restart mtproto-web.service mtproto-guardian.service
     echo -e "\e[32m✔ Конфигурация восстановлена, службы перезапущены!\e[0m"
     show_info
@@ -1166,7 +1246,7 @@ install_all() {
 
     echo "Установка системных пакетов..."
     apt-get update -qq
-    apt-get install -y -qq python3 python3-venv python3-pip curl psmisc tar zip unzip > /dev/null
+    apt-get install -y -qq python3 python3-venv python3-pip curl psmisc tar zip unzip openssl > /dev/null
 
     read -rp "Введите порт для Веб-панели [по умолчанию 8080]: " WEB_PORT
     WEB_PORT=${WEB_PORT:-8080}
@@ -1177,8 +1257,13 @@ install_all() {
     read -rp "Пароль администратора веб-панели [по умолчанию oomkilled]: " WEB_PASS
     WEB_PASS=${WEB_PASS:-oomkilled}
 
+    read -rp "Включить самоподписанный HTTPS/SSL? (Y/n): " ENABLE_SSL
+    ENABLE_SSL=${ENABLE_SSL:-Y}
+    USE_SSL="false"
+    [[ "$ENABLE_SSL" =~ ^[Yy]$ ]] && USE_SSL="true"
+
     if [[ -d "$INSTALL_DIR" ]]; then
-        systemctl stop mtproto-proxy.service mtproto-web.service mtproto-guardian.service 2>/dev/null || true
+        systemctl stop mtproto-web.service mtproto-guardian.service 2>/dev/null || true
         rm -rf "$INSTALL_DIR"
     fi
 
@@ -1204,23 +1289,20 @@ install_all() {
 }
 EOF
 
-    write_app_modules
-
-    cat <<EOF > "$WEB_SERVICE"
-[Unit]
-Description=OOMKilled Web Portal
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/uvicorn web_panel:app --host 0.0.0.0 --port $WEB_PORT
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
+    cat <<EOF > "$META_FILE"
+IP=$IP
+WEB_PORT=$WEB_PORT
+WEB_USER=$WEB_USER
+WEB_PASS=$WEB_PASS
+USE_SSL=$USE_SSL
 EOF
+
+    if [[ "$USE_SSL" == "true" ]]; then
+        generate_self_signed_ssl
+    fi
+
+    write_app_modules
+    update_systemd_service
 
     cat <<EOF > "$GUARDIAN_SERVICE"
 [Unit]
@@ -1238,20 +1320,9 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-    cat <<EOF > "$META_FILE"
-IP=$IP
-WEB_PORT=$WEB_PORT
-WEB_USER=$WEB_USER
-WEB_PASS=$WEB_PASS
-EOF
-
     if command -v ufw &>/dev/null && ufw status | grep -qw active; then
         ufw allow "$WEB_PORT"/tcp >/dev/null 2>&1 || true
     fi
-
-    systemctl stop mtproto-proxy.service 2>/dev/null || true
-    systemctl disable mtproto-proxy.service 2>/dev/null || true
-    rm -f /etc/systemd/system/mtproto-proxy.service /usr/local/bin/oom-rotate-tls 2>/dev/null || true
 
     systemctl daemon-reload
     systemctl enable --now mtproto-web.service mtproto-guardian.service
@@ -1269,10 +1340,15 @@ show_info() {
     # shellcheck source=/dev/null
     source "$META_FILE"
 
+    local use_ssl="${USE_SSL:-false}"
+    local proto="http"
+    [[ "$use_ssl" == "true" ]] && proto="https"
+
     IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org)
 
     echo -e "\n\e[36m================ OOMKilled Portal (v${SCRIPT_VERSION}) ================\e[0m"
-    echo -e "Веб-панель:   \e[36mhttp://${IP}:${WEB_PORT}\e[0m"
+    echo -e "Веб-панель:   \e[36m${proto}://${IP}:${WEB_PORT}\e[0m"
+    echo -e "Протокол:     \e[33m${proto^^}\e[0m"
     echo -e "Логин:        \e[33m$WEB_USER\e[0m"
     echo -e "Пароль:       \e[33m$WEB_PASS\e[0m"
     echo -e "======================================================\n"
@@ -1286,7 +1362,7 @@ try:
         data = json.load(f)
     for name, info in data.items():
         sub = info.get('sub_token', '')
-        sub_url = f'http://$IP:$WEB_PORT/sub/{sub}'
+        sub_url = f'$proto://$IP:$WEB_PORT/sub/{sub}'
         p_url = info.get('proxy_url', 'не задан')
         print(f'USER_BLOCK::{name}::{sub_url}::{p_url}')
 except Exception:
@@ -1315,6 +1391,7 @@ fix_and_restart() {
     fi
 
     chmod -R 755 "$INSTALL_DIR" 2>/dev/null || true
+    update_systemd_service
     systemctl daemon-reload
     systemctl restart mtproto-web.service mtproto-guardian.service
     sleep 2
@@ -1405,27 +1482,29 @@ while true; do
     echo -e "\e[1m========================================\e[0m"
     echo "1) Полная установка Портала"
     echo "2) Показать ссылки клиентов"
-    echo "3) Перезапустить службу / Fixer"
-    echo "4) Посмотреть логи панели"
-    echo "5) Обновить скрипт с GitHub"
-    echo "6) Резервное копирование и восстановление"
-    echo "7) Полностью удалить портал"
+    echo "3) Настроить самоподписанный SSL (HTTPS)"
+    echo "4) Перезапустить службу / Fixer"
+    echo "5) Посмотреть логи панели"
+    echo "6) Обновить скрипт с GitHub"
+    echo "7) Резервное копирование и восстановление"
+    echo "8) Полностью удалить портал"
     echo "0) Выход"
-    read -rp "Выберите действие [0-7]: " OPTION
+    read -rp "Выберите действие [0-8]: " OPTION
 
     case "$OPTION" in
         1) install_all ;;
         2) show_info ;;
-        3) fix_and_restart ;;
-        4) journalctl -u mtproto-web.service -f ;;
-        5) self_update ;;
-        6)
+        3) toggle_ssl_menu ;;
+        4) fix_and_restart ;;
+        5) journalctl -u mtproto-web.service -f ;;
+        6) self_update ;;
+        7)
             echo -e "\n1) Создать резервную копию\n2) Восстановить из резервной копии"
             read -rp "Ваш выбор [1-2]: " B_OPT
             [[ "$B_OPT" == "1" ]] && create_backup
             [[ "$B_OPT" == "2" ]] && restore_backup
             ;;
-        7) uninstall_all ;;
+        8) uninstall_all ;;
         0) exit 0 ;;
         *) echo -e "\e[31mНеверный выбор.\e[0m\n" ;;
     esac
