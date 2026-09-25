@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.1
+# Version     : 2.3
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.1"
+SCRIPT_VERSION="2.3"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -55,7 +55,6 @@ obtain_letsencrypt_ssl() {
     apt-get update -qq
     apt-get install -y -qq certbot >/dev/null
 
-    # Проверка доступности 80 порта
     if fuser 80/tcp &>/dev/null; then
         echo "Временная остановка служб на 80 порту..."
         fuser -k 80/tcp 2>/dev/null || true
@@ -73,7 +72,6 @@ obtain_letsencrypt_ssl() {
         echo "SSL_TYPE=letsencrypt" >> "$META_FILE"
         echo "DOMAIN_NAME=$DOMAIN_NAME" >> "$META_FILE"
 
-        # Настройка хука автопродления
         mkdir -p /etc/letsencrypt/renewal-hooks/deploy/
         cat <<'EOF' > /etc/letsencrypt/renewal-hooks/deploy/restart-oom-portal.sh
 #!/bin/bash
@@ -195,13 +193,15 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, F
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.1")
+app = FastAPI(title="OOMKilled Portal v2.3")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
 BRANDING_PATH = "/opt/mtproto_by_oomkilled/branding.json"
 VPN_DIR = "/opt/mtproto_by_oomkilled/vpn_configs"
 META_PATH = "/etc/mtproto_oomkilled.conf"
+
+FAVICON_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2338bdf8'/%3E%3Cstop offset='100%25' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M32 4L10 14v18c0 14.5 9.4 24.3 22 28 12.6-3.7 22-13.5 22-28V14L32 4z' fill='%230f172a' stroke='url(%23g)' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M34 16L22 34h9l-3 14 14-20h-9l4-12z' fill='url(%23g)'/%3E%3C/svg%3E"
 
 os.makedirs(VPN_DIR, exist_ok=True)
 
@@ -266,6 +266,24 @@ def list_user_vpn_files(username: str):
     if os.path.exists(u_dir):
         return sorted(os.listdir(u_dir))
     return []
+
+def get_file_badge(filename: str):
+    lower = filename.lower()
+    if lower.endswith(".conf") or "wireguard" in lower:
+        return ('<span style="background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35); '
+                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">🛡️ WG</span>')
+    elif lower.endswith(".ovpn"):
+        return ('<span style="background:rgba(249,115,22,0.18); color:#fb923c; border:1px solid rgba(249,115,22,0.35); '
+                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">🔑 OVPN</span>')
+    elif lower.endswith(".json"):
+        return ('<span style="background:rgba(168,85,247,0.18); color:#c084fc; border:1px solid rgba(168,85,247,0.35); '
+                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">⚡ JSON</span>')
+    elif lower.endswith(".zip") or lower.endswith(".tar.gz") or lower.endswith(".rar"):
+        return ('<span style="background:rgba(245,158,11,0.18); color:#fbbf24; border:1px solid rgba(245,158,11,0.35); '
+                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">📦 ZIP</span>')
+    else:
+        return ('<span style="background:rgba(148,163,184,0.18); color:#cbd5e1; border:1px solid rgba(148,163,184,0.35); '
+                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">📄 FILE</span>')
 
 @app.get("/logout")
 def logout():
@@ -441,9 +459,13 @@ def subscription_page(token: str):
         """
         for f_name in vpn_files:
             dl_url = f"/sub/{token}/download/{f_name}"
+            badge_icon = get_file_badge(f_name)
             vpn_files_html += f"""
             <div class='vpn-item'>
-                <span style='font-family:monospace; font-size:13px; color:#e2e8f0;'>📄 {f_name}</span>
+                <div style="display:flex; align-items:center;">
+                    {badge_icon}
+                    <span style='font-family:monospace; font-size:13px; color:#e2e8f0;'>{f_name}</span>
+                </div>
                 <a href='{dl_url}' class='btn-download' download>Скачать</a>
             </div>
             """
@@ -460,6 +482,7 @@ def subscription_page(token: str):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{branding.get('service_name', 'Portal')} | {target_name}</title>
+    <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
     <style>
         * {{ box-sizing: border-box; }}
         body {{
@@ -865,9 +888,11 @@ def dashboard(user: str = Depends(auth_user)):
         attached_files = list_user_vpn_files(u_name)
         files_chips = ""
         for af in attached_files:
+            chip_badge = get_file_badge(af)
             files_chips += f"""
             <span class="file-chip">
-                <span>📄 {af}</span>
+                {chip_badge}
+                <span style="font-family:monospace;">{af}</span>
                 <form action="/delete-vpn-file" method="post" style="margin:0;">
                     <input type="hidden" name="username" value="{u_name}">
                     <input type="hidden" name="filename" value="{af}">
@@ -954,7 +979,8 @@ def dashboard(user: str = Depends(auth_user)):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.1</title>
+        <title>OOMKilled Portal v2.3</title>
+        <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }}
             .container {{ max-width: 940px; margin: 0 auto; }}
@@ -994,7 +1020,7 @@ def dashboard(user: str = Depends(auth_user)):
             .custom-file-upload:hover {{ background: #2563eb; }}
             .custom-file-upload input[type="file"] {{ display: none; }}
             .chips-container {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
-            .file-chip {{ background: #1e293b; border: 1px solid #475569; padding: 4px 10px; border-radius: 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; color: #e2e8f0; }}
+            .file-chip {{ background: #1e293b; border: 1px solid #475569; padding: 4px 10px; border-radius: 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; color: #e2e8f0; }}
             .file-chip-del {{ background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1; }}
             .file-chip-del:hover {{ color: #f87171; }}
         </style>
@@ -1002,7 +1028,7 @@ def dashboard(user: str = Depends(auth_user)):
     <body>
         <div class="container">
             <div class="header-bar">
-                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.1</span></h1>
+                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.3</span></h1>
                 <div class="actions">
                     <a href="/backup" class="btn-backup">Скачать Бэкап</a>
                     <a href="/logout" class="btn-logout">Выйти</a>
