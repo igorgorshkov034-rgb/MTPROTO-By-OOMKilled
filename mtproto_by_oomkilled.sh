@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.3
+# Version     : 2.4
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.3"
+SCRIPT_VERSION="2.4"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -140,7 +140,12 @@ write_app_modules() {
   "support_link": "https://t.me/telegram",
   "guide_ios": "1. Нажмите «Подключить в Telegram» или скопируйте ключ/файл.\n2. Импортируйте параметры в ваше приложение.",
   "guide_android": "1. Нажмите кнопку подключения или скачайте VPN-файл ниже.\n2. Добавьте его в установленный VPN-клиент.",
-  "guide_desktop": "1. Скопируйте ключ или скачайте файл конфигурации.\n2. Импортируйте его в настольный клиент."
+  "guide_desktop": "1. Скопируйте ключ или скачайте файл конфигурации.\n2. Импортируйте его в настольный клиент.",
+  "app_ios": "",
+  "app_android": "",
+  "app_windows": "",
+  "app_macos": "",
+  "app_linux": ""
 }
 EOF
     fi
@@ -193,7 +198,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, F
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.3")
+app = FastAPI(title="OOMKilled Portal v2.4")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
@@ -234,7 +239,12 @@ def get_branding():
         "support_link": "https://t.me/telegram",
         "guide_ios": "1. Нажмите «Подключить в Telegram» или скопируйте ключ/файл.",
         "guide_android": "1. Нажмите кнопку подключения или скачайте VPN-файл ниже.",
-        "guide_desktop": "1. Скопируйте ключ или скачайте файл конфигурации."
+        "guide_desktop": "1. Скопируйте ключ или скачайте файл конфигурации.",
+        "app_ios": "",
+        "app_android": "",
+        "app_windows": "",
+        "app_macos": "",
+        "app_linux": ""
     }
     if os.path.exists(BRANDING_PATH):
         try:
@@ -476,6 +486,24 @@ def subscription_page(token: str):
     desktop_text = branding.get("guide_desktop", "").replace("\n", "<br>")
     support_url = branding.get("support_link", "")
 
+    app_ios = branding.get("app_ios", "").strip()
+    app_android = branding.get("app_android", "").strip()
+    app_windows = branding.get("app_windows", "").strip()
+    app_macos = branding.get("app_macos", "").strip()
+    app_linux = branding.get("app_linux", "").strip()
+
+    btn_app_ios = f'<a href="{app_ios}" target="_blank" class="glass-app-btn">📲 Скачать приложение для iOS</a>' if app_ios else ""
+    btn_app_android = f'<a href="{app_android}" target="_blank" class="glass-app-btn">📲 Скачать приложение для Android</a>' if app_android else ""
+    
+    desktop_btns = []
+    if app_windows:
+        desktop_btns.append(f'<a href="{app_windows}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🪟 Скачать для Windows</a>')
+    if app_macos:
+        desktop_btns.append(f'<a href="{app_macos}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🍏 Скачать для macOS</a>')
+    if app_linux:
+        desktop_btns.append(f'<a href="{app_linux}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🐧 Скачать для Linux</a>')
+    btns_app_desktop = "".join(desktop_btns)
+
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -618,7 +646,7 @@ def subscription_page(token: str):
             box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5);
         }}
         .glass-btn-support {{
-            margin-top: 12px;
+            margin-top: 14px;
             background: rgba(255, 255, 255, 0.05);
             color: #94a3b8;
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -627,6 +655,27 @@ def subscription_page(token: str):
         .glass-btn-support:hover {{
             background: rgba(255, 255, 255, 0.09);
             color: #f8fafc;
+        }}
+
+        .glass-app-btn {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background: rgba(56, 189, 248, 0.12);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.28);
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            margin-top: 12px;
+            transition: all 0.2s;
+        }}
+        .glass-app-btn:hover {{
+            background: rgba(56, 189, 248, 0.22);
+            transform: translateY(-1px);
         }}
 
         .glass-code {{
@@ -796,9 +845,18 @@ def subscription_page(token: str):
             <button class="tab-btn" onclick="showTab('android', this)">Android</button>
             <button class="tab-btn" onclick="showTab('desktop', this)">ПК</button>
         </div>
-        <div id="tab-ios" class="tab-content active">{ios_text}</div>
-        <div id="tab-android" class="tab-content">{android_text}</div>
-        <div id="tab-desktop" class="tab-content">{desktop_text}</div>
+        <div id="tab-ios" class="tab-content active">
+            <div>{ios_text}</div>
+            {btn_app_ios}
+        </div>
+        <div id="tab-android" class="tab-content">
+            <div>{android_text}</div>
+            {btn_app_android}
+        </div>
+        <div id="tab-desktop" class="tab-content">
+            <div>{desktop_text}</div>
+            {btns_app_desktop}
+        </div>
     </div>
 
     <div id="toast" class="toast">
@@ -979,7 +1037,7 @@ def dashboard(user: str = Depends(auth_user)):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.3</title>
+        <title>OOMKilled Portal v2.4</title>
         <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }}
@@ -1028,7 +1086,7 @@ def dashboard(user: str = Depends(auth_user)):
     <body>
         <div class="container">
             <div class="header-bar">
-                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.3</span></h1>
+                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.4</span></h1>
                 <div class="actions">
                     <a href="/backup" class="btn-backup">Скачать Бэкап</a>
                     <a href="/logout" class="btn-logout">Выйти</a>
@@ -1087,6 +1145,33 @@ def dashboard(user: str = Depends(auth_user)):
                                 <input type="text" name="support_link" value="{branding.get('support_link', '')}" style="width:100%;" placeholder="https://t.me/your_support">
                             </div>
                         </div>
+
+                        <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:15px; margin-bottom:20px;">
+                            <h4 style="margin:0 0 12px 0; color:#38bdf8;">📲 Ссылки на скачивание приложений для клиентов</h4>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                                <div class="brand-field" style="margin:0;">
+                                    <label>iOS (App Store / Happ / Streisand):</label>
+                                    <input type="text" name="app_ios" value="{branding.get('app_ios', '')}" placeholder="https://apps.apple.com/app/..." style="width:100%;">
+                                </div>
+                                <div class="brand-field" style="margin:0;">
+                                    <label>Android (Play Market / APK / v2rayNG):</label>
+                                    <input type="text" name="app_android" value="{branding.get('app_android', '')}" placeholder="https://play.google.com/store/apps/..." style="width:100%;">
+                                </div>
+                                <div class="brand-field" style="margin:0;">
+                                    <label>Windows (EXE / MSI / GitHub):</label>
+                                    <input type="text" name="app_windows" value="{branding.get('app_windows', '')}" placeholder="https://github.com/.../release.exe" style="width:100%;">
+                                </div>
+                                <div class="brand-field" style="margin:0;">
+                                    <label>macOS (DMG / App Store):</label>
+                                    <input type="text" name="app_macos" value="{branding.get('app_macos', '')}" placeholder="https://apps.apple.com/app/..." style="width:100%;">
+                                </div>
+                            </div>
+                            <div class="brand-field" style="margin-top:12px; margin-bottom:0;">
+                                <label>Linux (AppImage / DEB):</label>
+                                <input type="text" name="app_linux" value="{branding.get('app_linux', '')}" placeholder="https://github.com/.../release.AppImage" style="width:100%;">
+                            </div>
+                        </div>
+
                         <div class="brand-field">
                             <label>Инструкция подключения для iOS:</label>
                             <textarea name="guide_ios" rows="3" style="width:100%;">{branding.get('guide_ios', '')}</textarea>
@@ -1182,6 +1267,11 @@ def update_branding(
     guide_ios: str = Form(""),
     guide_android: str = Form(""),
     guide_desktop: str = Form(""),
+    app_ios: str = Form(""),
+    app_android: str = Form(""),
+    app_windows: str = Form(""),
+    app_macos: str = Form(""),
+    app_linux: str = Form(""),
     user: str = Depends(auth_user)
 ):
     save_branding({
@@ -1189,7 +1279,12 @@ def update_branding(
         "support_link": support_link.strip(),
         "guide_ios": guide_ios.strip(),
         "guide_android": guide_android.strip(),
-        "guide_desktop": guide_desktop.strip()
+        "guide_desktop": guide_desktop.strip(),
+        "app_ios": app_ios.strip(),
+        "app_android": app_android.strip(),
+        "app_windows": app_windows.strip(),
+        "app_macos": app_macos.strip(),
+        "app_linux": app_linux.strip()
     })
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1312,6 +1407,17 @@ if os.path.exists(p):
             ch = True
     if ch:
         with open(p, 'w') as f: json.dump(d, f, indent=2)
+
+b_path = '$BRANDING_FILE'
+if os.path.exists(b_path):
+    with open(b_path) as f: b = json.load(f)
+    b_ch = False
+    for field in ['app_ios', 'app_android', 'app_windows', 'app_macos', 'app_linux']:
+        if field not in b:
+            b[field] = ''
+            b_ch = True
+    if b_ch:
+        with open(b_path, 'w') as f: json.dump(b, f, indent=2, ensure_ascii=False)
 " 2>/dev/null || true
 
     update_systemd_service
