@@ -84,7 +84,7 @@ if __name__ == "__main__":
         time.sleep(30)
 EOF
 
-    # Веб-панель управления и страница клиента с ZIP-выгрузкой
+    # Веб-панель управления и обновленная страница клиента в стиле Glassmorphism
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
 import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
@@ -257,47 +257,65 @@ def subscription_page(token: str):
         raise HTTPException(status_code=404, detail="Подписка не найдена")
 
     now = int(time.time())
+    created = target_user.get("created_at", now)
     exp = target_user.get("expires_at", 0)
     u_status = target_user.get("status", "active")
     proxy_url = target_user.get("proxy_url", "").strip()
     custom_key = target_user.get("custom_key", "").strip()
 
+    progress_percent = 100
+    progress_color = "linear-gradient(90deg, #38bdf8, #818cf8)"
+
     if u_status == "paused":
         status_text = "Приостановлена"
-        status_color = "#f59e0b"
+        status_badge_class = "badge-paused"
         days_str = "На паузе"
+        progress_percent = 0
     elif exp > 0 and now > exp:
         status_text = "Срок действия истёк"
-        status_color = "#ef4444"
+        status_badge_class = "badge-expired"
         days_str = "Истекла"
+        progress_percent = 100
+        progress_color = "linear-gradient(90deg, #ef4444, #dc2626)"
     elif exp == 0:
         status_text = "Активна"
-        status_color = "#10b981"
-        days_str = "Бессрочно"
+        status_badge_class = "badge-active"
+        days_str = "Бессрочный доступ"
+        progress_percent = 100
+        progress_color = "linear-gradient(90deg, #10b981, #06b6d4)"
     else:
         status_text = "Активна"
-        status_color = "#10b981"
-        days_left = max(1, int((exp - now) / 86400))
-        days_str = f"{days_left} дн."
+        status_badge_class = "badge-active"
+        total_duration = max(1, exp - created)
+        remaining = max(0, exp - now)
+        progress_percent = min(100, max(5, int((remaining / total_duration) * 100)))
+        days_left = max(1, int(remaining / 86400))
+        days_str = f"Осталось {days_left} дн."
+        if progress_percent < 25:
+            progress_color = "linear-gradient(90deg, #f59e0b, #ef4444)"
+        elif progress_percent < 50:
+            progress_color = "linear-gradient(90deg, #38bdf8, #f59e0b)"
 
     proxy_block = ""
     if proxy_url:
         proxy_block = f"""
         <div style="margin-top: 15px;">
-            <a href="{proxy_url}" class="btn">Подключить в Telegram</a>
-            <div class="code">{proxy_url}</div>
+            <a href="{proxy_url}" class="glass-btn glass-btn-tg">
+                <span>✈️ Подключить в Telegram</span>
+            </a>
+            <div class="glass-code">{proxy_url}</div>
         </div>
         """
 
     key_block = ""
     if custom_key:
         key_block = f"""
-        <div class="custom-key-card">
+        <div class="glass-subcard">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="font-weight:600; font-size:14px; color:#38bdf8;">🔑 Ключ конфигурации:</span>
-                <button type="button" class="btn-copy" onclick="copyKey()">📋 Скопировать ключ</button>
+                <span style="font-weight:600; font-size:13px; color:#94a3b8;">🔑 Ключ конфигурации:</span>
+                <button type="button" class="btn-copy" onclick="copyKey()">Скопировать</button>
             </div>
-            <textarea id="key-text" class="key-area" readonly>{custom_key}</textarea>
+            <textarea id="key-text" class="glass-textarea" readonly>{custom_key}</textarea>
         </div>
         """
 
@@ -311,9 +329,9 @@ def subscription_page(token: str):
             """
 
         vpn_files_html += f"""
-        <div class='vpn-box'>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style='margin:0; font-size:15px; color:#38bdf8;'>📁 Файлы конфигураций</h3>
+        <div class='glass-subcard' style="margin-top: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span style='font-size:14px; font-weight:600; color:#cbd5e1;'>📁 Файлы конфигураций</span>
                 {zip_btn_html}
             </div>
         """
@@ -321,7 +339,7 @@ def subscription_page(token: str):
             dl_url = f"/sub/{token}/download/{f_name}"
             vpn_files_html += f"""
             <div class='vpn-item'>
-                <span style='font-family:monospace; font-size:13px; color:#cbd5e1;'>📄 {f_name}</span>
+                <span style='font-family:monospace; font-size:13px; color:#e2e8f0;'>📄 {f_name}</span>
                 <a href='{dl_url}' class='btn-download' download>Скачать</a>
             </div>
             """
@@ -339,50 +357,320 @@ def subscription_page(token: str):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{branding.get('service_name', 'Portal')} | {target_name}</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0f19; color: #f8fafc; margin: 0; padding: 20px; }}
-        .wrap {{ max-width: 520px; margin: 0 auto; background: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
-        h2 {{ color: #38bdf8; margin: 0 0 15px 0; text-align: center; }}
-        .header-badge {{ text-align: center; margin-bottom: 20px; }}
-        .info-pill {{ display: inline-block; background: #0f172a; padding: 6px 14px; border-radius: 20px; font-size: 13px; border: 1px solid #334155; }}
-        .btn {{ display: block; width: 100%; box-sizing: border-box; background: #10b981; color: #fff; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 16px; text-align: center; margin-top: 10px; }}
-        .btn:hover {{ background: #059669; }}
-        .btn-support {{ display: block; width: 100%; box-sizing: border-box; background: #3b82f6; color: #fff; text-decoration: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; text-align: center; margin-top: 10px; }}
-        .btn-support:hover {{ background: #2563eb; }}
-        .code {{ background: #020617; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; word-break: break-all; color: #94a3b8; margin-top: 10px; border: 1px solid #334155; }}
-        
-        .custom-key-card {{ background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-top: 18px; text-align: left; }}
-        .key-area {{ width: 100%; box-sizing: border-box; background: #020617; color: #38bdf8; font-family: monospace; font-size: 12px; padding: 8px; border-radius: 6px; border: 1px solid #1e293b; resize: none; height: 65px; }}
-        .btn-copy {{ background: #38bdf8; color: #0f172a; border: none; padding: 5px 12px; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; }}
-        .btn-copy:hover {{ background: #0ea5e9; }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #090d16;
+            color: #f8fafc;
+            margin: 0;
+            padding: 24px 16px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
+        }}
 
-        .vpn-box {{ background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-top: 20px; text-align: left; }}
-        .vpn-item {{ display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1e293b; }}
+        /* Неоновые фоновые сферы для Glassmorphism */
+        .ambient-bg-1 {{
+            position: fixed;
+            width: 320px;
+            height: 320px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.22) 0%, rgba(0,0,0,0) 70%);
+            top: 5%;
+            left: 10%;
+            z-index: 0;
+            filter: blur(40px);
+            pointer-events: none;
+        }}
+        .ambient-bg-2 {{
+            position: fixed;
+            width: 340px;
+            height: 340px;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(0,0,0,0) 70%);
+            bottom: 5%;
+            right: 10%;
+            z-index: 0;
+            filter: blur(40px);
+            pointer-events: none;
+        }}
+
+        .glass-card {{
+            position: relative;
+            z-index: 1;
+            max-width: 480px;
+            width: 100%;
+            background: rgba(17, 24, 39, 0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 28px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }}
+
+        h2 {{
+            color: #f8fafc;
+            margin: 0 0 16px 0;
+            text-align: center;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }}
+
+        .user-pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }}
+
+        .status-badge {{
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }}
+        .badge-active {{ background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }}
+        .badge-paused {{ background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+        .badge-expired {{ background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
+
+        /* Прогресс-бар */
+        .progress-box {{
+            margin: 18px 0 20px 0;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 12px 14px;
+        }}
+        .progress-meta {{
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }}
+        .progress-track {{
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }}
+        .progress-fill {{
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }}
+
+        /* Кнопки */
+        .glass-btn {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 12px 18px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }}
+        .glass-btn-tg {{
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+        }}
+        .glass-btn-tg:hover {{
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5);
+        }}
+        .glass-btn-support {{
+            margin-top: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 13px;
+        }}
+        .glass-btn-support:hover {{
+            background: rgba(255, 255, 255, 0.09);
+            color: #f8fafc;
+        }}
+
+        .glass-code {{
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 8px;
+            word-break: break-all;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }}
+
+        /* Внутренние стеклянные карточки */
+        .glass-subcard {{
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-top: 14px;
+        }}
+        .glass-textarea {{
+            width: 100%;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: #38bdf8;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 8px;
+            resize: none;
+        }}
+        .btn-copy {{
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }}
+        .btn-copy:hover {{ background: rgba(56, 189, 248, 0.3); }}
+
+        /* Список файлов */
+        .vpn-item {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }}
         .vpn-item:last-child {{ border-bottom: none; }}
-        .btn-download {{ background: #6366f1; color: #fff; text-decoration: none; padding: 5px 12px; border-radius: 5px; font-size: 12px; font-weight: bold; }}
-        .btn-download:hover {{ background: #4f46e5; }}
-        .btn-zip-all {{ background: #0284c7; color: #fff; text-decoration: none; padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; }}
-        .btn-zip-all:hover {{ background: #0369a1; }}
+        .btn-download {{
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            text-decoration: none;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }}
+        .btn-download:hover {{ background: rgba(99, 102, 241, 0.3); }}
+        .btn-zip-all {{
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            text-decoration: none;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }}
 
-        .tabs {{ display: flex; gap: 6px; margin-top: 25px; border-bottom: 1px solid #334155; padding-bottom: 8px; }}
-        .tab-btn {{ background: none; border: none; color: #94a3b8; font-weight: bold; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-size: 14px; }}
-        .tab-btn.active {{ background: #334155; color: #38bdf8; }}
-        .tab-content {{ display: none; padding: 14px 0 0 0; font-size: 13px; line-height: 1.6; color: #cbd5e1; text-align: left; }}
+        /* Вкладки */
+        .tabs {{
+            display: flex;
+            gap: 6px;
+            margin-top: 22px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 8px;
+        }}
+        .tab-btn {{
+            background: none;
+            border: none;
+            color: #64748b;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            transition: 0.2s;
+        }}
+        .tab-btn.active {{
+            background: rgba(255, 255, 255, 0.08);
+            color: #38bdf8;
+        }}
+        .tab-content {{
+            display: none;
+            padding: 12px 0 0 0;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #94a3b8;
+        }}
         .tab-content.active {{ display: block; }}
+
+        /* Всплывающий тост */
+        .toast {{
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #f8fafc;
+            padding: 10px 18px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+            pointer-events: none;
+        }}
+        .toast.show {{
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }}
     </style>
 </head>
 <body>
-    <div class="wrap">
+    <div class="ambient-bg-1"></div>
+    <div class="ambient-bg-2"></div>
+
+    <div class="glass-card">
         <h2>{branding.get('service_name', 'Portal')}</h2>
-        <div class="header-badge">
-            <div class="info-pill">Пользователь: <strong>{target_name}</strong></div>
-            <div style="margin-top: 8px;">Статус: <strong style="color:{status_color};">{status_text}</strong> | Срок: <strong>{days_str}</strong></div>
+        
+        <div style="text-align: center; margin-bottom: 12px;">
+            <div class="user-pill">
+                <span>👤 <strong>{target_name}</strong></span>
+                <span class="status-badge {status_badge_class}">{status_text}</span>
+            </div>
+        </div>
+
+        <!-- Прогресс-бар срока подписки -->
+        <div class="progress-box">
+            <div class="progress-meta">
+                <span>Срок действия</span>
+                <span style="color:#f8fafc; font-weight:600;">{days_str}</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: {progress_percent}%; background: {progress_color};"></div>
+            </div>
         </div>
 
         {proxy_block}
         {key_block}
         {vpn_files_html}
 
-        {f'<a href="{support_url}" target="_blank" class="btn-support">Связаться с техподдержкой</a>' if support_url else ''}
+        {f'<a href="{support_url}" target="_blank" class="glass-btn glass-btn-support">💬 Связаться с техподдержкой</a>' if support_url else ''}
 
         <div class="tabs">
             <button class="tab-btn active" onclick="showTab('ios', this)">iOS</button>
@@ -392,6 +680,11 @@ def subscription_page(token: str):
         <div id="tab-ios" class="tab-content active">{ios_text}</div>
         <div id="tab-android" class="tab-content">{android_text}</div>
         <div id="tab-desktop" class="tab-content">{desktop_text}</div>
+    </div>
+
+    <!-- Всплывающий тост вместо alert -->
+    <div id="toast" class="toast">
+        <span style="color:#10b981;">✓</span> Ключ скопирован в буфер обмена
     </div>
 
     <script>
@@ -407,9 +700,17 @@ def subscription_page(token: str):
             if (key) {{
                 key.select();
                 navigator.clipboard.writeText(key.value).then(() => {{
-                    alert('Ключ скопирован в буфер обмена!');
+                    showToast();
                 }});
             }}
+        }}
+
+        function showToast() {{
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => {{
+                toast.classList.remove('show');
+            }}, 2400);
         }}
     </script>
 </body>
@@ -795,12 +1096,16 @@ if [[ "${1:-}" == "--upgrade-modules" ]]; then
 
     write_app_modules
     python3 -c "
-import json, os, secrets
+import json, os, secrets, time
 p = '$USER_DATA_FILE'
 if os.path.exists(p):
     with open(p) as f: d = json.load(f)
     ch = False
+    now = int(time.time())
     for k, v in d.items():
+        if 'created_at' not in v:
+            v['created_at'] = now
+            ch = True
         if 'proxy_url' not in v:
             v['proxy_url'] = ''
             ch = True
