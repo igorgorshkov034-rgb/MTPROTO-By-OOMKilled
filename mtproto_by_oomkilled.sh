@@ -17,7 +17,7 @@ BRANDING_FILE="$INSTALL_DIR/branding.json"
 VPN_STORAGE_DIR="$INSTALL_DIR/vpn_configs"
 META_FILE="/etc/mtproto_oomkilled.conf"
 BACKUP_DIR="/var/backups/mtproto_oomkilled"
-GITHUB_REPO_URL="https://raw.githubusercontent.com/OOMKilled-proxy/MTPROTO-By-OOMKilled/main/mtproto_by_oomkilled.sh"
+GITHUB_REPO_URL="https://raw.githubusercontent.com/igorgorshkov034-rgb/MTPROTO-By-OOMKilled/refs/heads/main/mtproto_by_oomkilled.sh"
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         time.sleep(30)
 EOF
 
-    # Веб-панель управления и страница клиента с поддержкой ZIP-выгрузки
+    # Веб-панель управления и страница клиента с ZIP-выгрузкой
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
 import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
