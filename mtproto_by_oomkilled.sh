@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.0
+# Version     : 2.1
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.0"
+SCRIPT_VERSION="2.1"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -17,8 +17,8 @@ BRANDING_FILE="$INSTALL_DIR/branding.json"
 VPN_STORAGE_DIR="$INSTALL_DIR/vpn_configs"
 META_FILE="/etc/mtproto_oomkilled.conf"
 BACKUP_DIR="/var/backups/mtproto_oomkilled"
-SSL_CERT="$INSTALL_DIR/cert.pem"
-SSL_KEY="$INSTALL_DIR/key.pem"
+SELF_SSL_CERT="$INSTALL_DIR/cert.pem"
+SELF_SSL_KEY="$INSTALL_DIR/key.pem"
 GITHUB_REPO_URL="https://raw.githubusercontent.com/igorgorshkov034-rgb/MTPROTO-By-OOMKilled/refs/heads/main/mtproto_by_oomkilled.sh"
 
 check_root() {
@@ -32,24 +32,86 @@ generate_self_signed_ssl() {
     echo "Генерация самоподписанного SSL-сертификата..."
     mkdir -p "$INSTALL_DIR"
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout "$SSL_KEY" \
-        -out "$SSL_CERT" \
+        -keyout "$SELF_SSL_KEY" \
+        -out "$SELF_SSL_CERT" \
         -subj "/CN=OOMKilled-Portal/O=OOMKilled/C=NL" >/dev/null 2>&1
-    chmod 600 "$SSL_KEY"
-    chmod 644 "$SSL_CERT"
+    chmod 600 "$SELF_SSL_KEY"
+    chmod 644 "$SELF_SSL_CERT"
+}
+
+obtain_letsencrypt_ssl() {
+    echo -e "\n\e[34m=== Получение официального сертификата Let's Encrypt ===\e[0m"
+    echo -e "\e[33mВнимание: Домен должен указывать на IP этого сервера (A-запись)!\e[0m"
+    echo -e "\e[33mПорт 80 должен быть свободен на время проверки ACME.\e[0m"
+    read -rp "Введите ваше доменное имя (например, sub.domain.com): " DOMAIN_NAME
+    DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+
+    if [[ -z "$DOMAIN_NAME" ]]; then
+        echo -e "\e[31mОшибка: Имя домена не может быть пустым.\e[0m"
+        return 1
+    fi
+
+    echo "Установка certbot..."
+    apt-get update -qq
+    apt-get install -y -qq certbot >/dev/null
+
+    # Проверка доступности 80 порта
+    if fuser 80/tcp &>/dev/null; then
+        echo "Временная остановка служб на 80 порту..."
+        fuser -k 80/tcp 2>/dev/null || true
+    fi
+
+    echo "Запрос сертификата в Let's Encrypt..."
+    if certbot certonly --standalone --agree-tos --register-unsafely-without-email -d "$DOMAIN_NAME" --non-interactive; then
+        echo -e "\e[32m✔ Сертификат для $DOMAIN_NAME успешно получен!\e[0m"
+
+        sed -i '/^USE_SSL=/d' "$META_FILE" 2>/dev/null || true
+        sed -i '/^SSL_TYPE=/d' "$META_FILE" 2>/dev/null || true
+        sed -i '/^DOMAIN_NAME=/d' "$META_FILE" 2>/dev/null || true
+
+        echo "USE_SSL=true" >> "$META_FILE"
+        echo "SSL_TYPE=letsencrypt" >> "$META_FILE"
+        echo "DOMAIN_NAME=$DOMAIN_NAME" >> "$META_FILE"
+
+        # Настройка хука автопродления
+        mkdir -p /etc/letsencrypt/renewal-hooks/deploy/
+        cat <<'EOF' > /etc/letsencrypt/renewal-hooks/deploy/restart-oom-portal.sh
+#!/bin/bash
+systemctl restart mtproto-web.service
+EOF
+        chmod +x /etc/letsencrypt/renewal-hooks/deploy/restart-oom-portal.sh
+
+        update_systemd_service
+        systemctl restart mtproto-web.service
+        show_info
+    else
+        echo -e "\e[31m✖ Ошибка выпуска сертификата. Проверьте A-запись домена и отсутствие блокировки 80 порта.\e[0m"
+        return 1
+    fi
 }
 
 update_systemd_service() {
     local use_ssl="false"
+    local ssl_type="self"
+    local domain_name=""
+    local web_port="8080"
+
     if [[ -f "$META_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$META_FILE"
         use_ssl="${USE_SSL:-false}"
+        ssl_type="${SSL_TYPE:-self}"
+        domain_name="${DOMAIN_NAME:-}"
+        web_port="${WEB_PORT:-8080}"
     fi
 
     local ssl_flags=""
-    if [[ "$use_ssl" == "true" && -f "$SSL_CERT" && -f "$SSL_KEY" ]]; then
-        ssl_flags="--ssl-keyfile $SSL_KEY --ssl-certfile $SSL_CERT"
+    if [[ "$use_ssl" == "true" ]]; then
+        if [[ "$ssl_type" == "letsencrypt" && -n "$domain_name" && -f "/etc/letsencrypt/live/${domain_name}/fullchain.pem" ]]; then
+            ssl_flags="--ssl-keyfile /etc/letsencrypt/live/${domain_name}/privkey.pem --ssl-certfile /etc/letsencrypt/live/${domain_name}/fullchain.pem"
+        elif [[ -f "$SELF_SSL_CERT" && -f "$SELF_SSL_KEY" ]]; then
+            ssl_flags="--ssl-keyfile $SELF_SSL_KEY --ssl-certfile $SELF_SSL_CERT"
+        fi
     fi
 
     cat <<EOF > "$WEB_SERVICE"
@@ -60,7 +122,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/uvicorn web_panel:app --host 0.0.0.0 --port $WEB_PORT $ssl_flags
+ExecStart=$INSTALL_DIR/venv/bin/uvicorn web_panel:app --host 0.0.0.0 --port $web_port $ssl_flags
 Restart=always
 RestartSec=3
 
@@ -85,7 +147,6 @@ write_app_modules() {
 EOF
     fi
 
-    # Демон контроля сроков действия подписок
     cat <<'EOF' > "$INSTALL_DIR/guardian.py"
 import json, os, time
 
@@ -128,14 +189,13 @@ if __name__ == "__main__":
         time.sleep(30)
 EOF
 
-    # Веб-панель управления и страница клиента (Glassmorphism UI)
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
 import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.0")
+app = FastAPI(title="OOMKilled Portal v2.1")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
@@ -758,7 +818,11 @@ def dashboard(user: str = Depends(auth_user)):
     web_port = int(meta.get("WEB_PORT", 8080))
     ip = meta.get("IP", "127.0.0.1")
     use_ssl = (meta.get("USE_SSL", "false") == "true")
+    ssl_type = meta.get("SSL_TYPE", "self")
+    domain_name = meta.get("DOMAIN_NAME", "").strip()
+
     protocol = "https" if use_ssl else "http"
+    host_address = domain_name if (use_ssl and ssl_type == "letsencrypt" and domain_name) else ip
 
     cpu_usage = psutil.cpu_percent(interval=0.1)
     ram_usage = psutil.virtual_memory().percent
@@ -771,7 +835,7 @@ def dashboard(user: str = Depends(auth_user)):
         proxy_url = u_info.get("proxy_url", "")
         custom_key = u_info.get("custom_key", "")
         sub_token = u_info.get("sub_token", "")
-        sub_url = f"{protocol}://{ip}:{web_port}/sub/{sub_token}"
+        sub_url = f"{protocol}://{host_address}:{web_port}/sub/{sub_token}"
 
         exp = u_info.get("expires_at", 0)
         u_status = u_info.get("status", "active")
@@ -878,14 +942,19 @@ def dashboard(user: str = Depends(auth_user)):
         </div>
         """
 
-    ssl_status_badge = "<span style='color:#10b981; font-weight:bold;'>HTTPS (SSL включен)</span>" if use_ssl else "<span style='color:#f59e0b;'>HTTP (без SSL)</span>"
+    if use_ssl and ssl_type == "letsencrypt":
+        ssl_status_badge = f"<span style='color:#10b981; font-weight:bold;'>Let's Encrypt ({domain_name})</span>"
+    elif use_ssl:
+        ssl_status_badge = "<span style='color:#38bdf8; font-weight:bold;'>Самоподписанный SSL</span>"
+    else:
+        ssl_status_badge = "<span style='color:#f59e0b;'>HTTP (без SSL)</span>"
 
     html = f"""<!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.0</title>
+        <title>OOMKilled Portal v2.1</title>
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }}
             .container {{ max-width: 940px; margin: 0 auto; }}
@@ -933,7 +1002,7 @@ def dashboard(user: str = Depends(auth_user)):
     <body>
         <div class="container">
             <div class="header-bar">
-                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.0</span></h1>
+                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.1</span></h1>
                 <div class="actions">
                     <a href="/backup" class="btn-backup">Скачать Бэкап</a>
                     <a href="/logout" class="btn-logout">Выйти</a>
@@ -948,7 +1017,7 @@ def dashboard(user: str = Depends(auth_user)):
             <div id="section-users" class="menu-section active">
                 <div class="grid">
                     <div class="stat-box"><div>Всего пользователей</div><div class="stat-val">{len(users)}</div></div>
-                    <div class="stat-box"><div>Режим сети</div><div class="stat-val" style="font-size:14px; margin-top:8px;">{ssl_status_badge}</div></div>
+                    <div class="stat-box"><div>SSL Сертификат</div><div class="stat-val" style="font-size:13px; margin-top:8px;">{ssl_status_badge}</div></div>
                     <div class="stat-box"><div>Нагрузка CPU</div><div class="stat-val">{cpu_usage}%</div></div>
                     <div class="stat-box"><div>Использование ОЗУ</div><div class="stat-val">{ram_usage}%</div></div>
                 </div>
@@ -1130,31 +1199,49 @@ EOF
 }
 
 toggle_ssl_menu() {
-    echo -e "\n\e[34m=== Настройка самоподписанного SSL (HTTPS) ===\e[0m"
+    echo -e "\n\e[34m=== Управление SSL / HTTPS сертификатами ===\e[0m"
     local current_ssl="false"
+    local current_type="self"
+    local current_domain=""
+
     if [[ -f "$META_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$META_FILE"
         current_ssl="${USE_SSL:-false}"
+        current_type="${SSL_TYPE:-self}"
+        current_domain="${DOMAIN_NAME:-}"
     fi
 
-    echo -e "Текущий статус: \e[33m$([[ "$current_ssl" == "true" ]] && echo "ВКЛЮЧЕН (HTTPS)" || echo "ВЫКЛЮЧЕН (HTTP)")\e[0m"
-    echo "1) Включить самоподписанный SSL (HTTPS)"
-    echo "2) Отключить SSL (вернуться на HTTP)"
+    if [[ "$current_ssl" == "true" && "$current_type" == "letsencrypt" ]]; then
+        echo -e "Текущий статус: \e[32mLet's Encrypt (домен: $current_domain)\e[0m"
+    elif [[ "$current_ssl" == "true" ]]; then
+        echo -e "Текущий статус: \e[36mСамоподписанный SSL (HTTPS)\e[0m"
+    else
+        echo -e "Текущий статус: \e[33mВЫКЛЮЧЕН (HTTP)\e[0m"
+    fi
+
+    echo "1) Выпустить официальный сертификат Let's Encrypt (по домену)"
+    echo "2) Включить самоподписанный SSL"
+    echo "3) Отключить SSL (вернуться на HTTP)"
     echo "0) Назад"
-    read -rp "Выберите действие [0-2]: " SSL_CHOICE
+    read -rp "Выберите действие [0-3]: " SSL_CHOICE
 
     case "$SSL_CHOICE" in
         1)
+            obtain_letsencrypt_ssl
+            ;;
+        2)
             generate_self_signed_ssl
             sed -i '/^USE_SSL=/d' "$META_FILE" 2>/dev/null || true
+            sed -i '/^SSL_TYPE=/d' "$META_FILE" 2>/dev/null || true
             echo "USE_SSL=true" >> "$META_FILE"
+            echo "SSL_TYPE=self" >> "$META_FILE"
             update_systemd_service
             systemctl restart mtproto-web.service
             echo -e "\e[32m✔ Самоподписанный SSL успешно включен!\e[0m"
             show_info
             ;;
-        2)
+        3)
             sed -i '/^USE_SSL=/d' "$META_FILE" 2>/dev/null || true
             echo "USE_SSL=false" >> "$META_FILE"
             update_systemd_service
@@ -1257,11 +1344,6 @@ install_all() {
     read -rp "Пароль администратора веб-панели [по умолчанию oomkilled]: " WEB_PASS
     WEB_PASS=${WEB_PASS:-oomkilled}
 
-    read -rp "Включить самоподписанный HTTPS/SSL? (Y/n): " ENABLE_SSL
-    ENABLE_SSL=${ENABLE_SSL:-Y}
-    USE_SSL="false"
-    [[ "$ENABLE_SSL" =~ ^[Yy]$ ]] && USE_SSL="true"
-
     if [[ -d "$INSTALL_DIR" ]]; then
         systemctl stop mtproto-web.service mtproto-guardian.service 2>/dev/null || true
         rm -rf "$INSTALL_DIR"
@@ -1294,12 +1376,10 @@ IP=$IP
 WEB_PORT=$WEB_PORT
 WEB_USER=$WEB_USER
 WEB_PASS=$WEB_PASS
-USE_SSL=$USE_SSL
+USE_SSL=false
+SSL_TYPE=none
+DOMAIN_NAME=
 EOF
-
-    if [[ "$USE_SSL" == "true" ]]; then
-        generate_self_signed_ssl
-    fi
 
     write_app_modules
     update_systemd_service
@@ -1322,6 +1402,7 @@ EOF
 
     if command -v ufw &>/dev/null && ufw status | grep -qw active; then
         ufw allow "$WEB_PORT"/tcp >/dev/null 2>&1 || true
+        ufw allow 80/tcp >/dev/null 2>&1 || true
     fi
 
     systemctl daemon-reload
@@ -1341,14 +1422,20 @@ show_info() {
     source "$META_FILE"
 
     local use_ssl="${USE_SSL:-false}"
+    local ssl_type="${SSL_TYPE:-self}"
+    local domain_name="${DOMAIN_NAME:-}"
     local proto="http"
     [[ "$use_ssl" == "true" ]] && proto="https"
 
     IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org)
+    local host_addr="$IP"
+    if [[ "$use_ssl" == "true" && "$ssl_type" == "letsencrypt" && -n "$domain_name" ]]; then
+        host_addr="$domain_name"
+    fi
 
     echo -e "\n\e[36m================ OOMKilled Portal (v${SCRIPT_VERSION}) ================\e[0m"
-    echo -e "Веб-панель:   \e[36m${proto}://${IP}:${WEB_PORT}\e[0m"
-    echo -e "Протокол:     \e[33m${proto^^}\e[0m"
+    echo -e "Веб-панель:   \e[36m${proto}://${host_addr}:${WEB_PORT}\e[0m"
+    echo -e "Режим SSL:    \e[33m$([[ "$use_ssl" == "true" ]] && echo "$ssl_type (${proto^^})" || echo "Выключен (HTTP)")\e[0m"
     echo -e "Логин:        \e[33m$WEB_USER\e[0m"
     echo -e "Пароль:       \e[33m$WEB_PASS\e[0m"
     echo -e "======================================================\n"
@@ -1362,7 +1449,7 @@ try:
         data = json.load(f)
     for name, info in data.items():
         sub = info.get('sub_token', '')
-        sub_url = f'$proto://$IP:$WEB_PORT/sub/{sub}'
+        sub_url = f'$proto://$host_addr:$WEB_PORT/sub/{sub}'
         p_url = info.get('proxy_url', 'не задан')
         print(f'USER_BLOCK::{name}::{sub_url}::{p_url}')
 except Exception:
@@ -1482,7 +1569,7 @@ while true; do
     echo -e "\e[1m========================================\e[0m"
     echo "1) Полная установка Портала"
     echo "2) Показать ссылки клиентов"
-    echo "3) Настроить самоподписанный SSL (HTTPS)"
+    echo "3) Настроить SSL (Домен Let's Encrypt / Самоподписанный)"
     echo "4) Перезапустить службу / Fixer"
     echo "5) Посмотреть логи панели"
     echo "6) Обновить скрипт с GitHub"
