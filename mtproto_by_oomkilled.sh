@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.4
+# Version     : 2.5
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.4"
+SCRIPT_VERSION="2.5"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -193,12 +193,12 @@ if __name__ == "__main__":
 EOF
 
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
-import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile
+import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile, subprocess
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.4")
+app = FastAPI(title="OOMKilled Portal v2.5")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
@@ -321,6 +321,62 @@ def download_backup(user: str = Depends(auth_user)):
         buf,
         media_type="application/gzip",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.post("/restore-backup")
+async def restore_backup_web(backup_file: UploadFile = File(...), user: str = Depends(auth_user)):
+    if not backup_file.filename:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
+
+    content = await backup_file.read()
+    temp_archive = f"/tmp/restore_{int(time.time())}.tar.gz"
+    with open(temp_archive, "wb") as f:
+        f.write(content)
+
+    try:
+        with tarfile.open(temp_archive, "r:gz") as tar:
+            members = tar.getnames()
+            valid_names = {"users_meta.json", "mtproto_oomkilled.conf", "branding.json", "vpn_configs"}
+            has_valid = any(any(m.startswith(v) for v in valid_names) for m in members)
+            if not has_valid:
+                raise Exception("Некорректный формат архива бэкапа")
+
+            for member in tar.getmembers():
+                clean_name = os.path.normpath(member.name).lstrip("/")
+                if clean_name == "mtproto_oomkilled.conf":
+                    tar.extract(member, path="/etc")
+                elif clean_name in ["users_meta.json", "branding.json"] or clean_name.startswith("vpn_configs"):
+                    tar.extract(member, path="/opt/mtproto_by_oomkilled")
+    except Exception as e:
+        if os.path.exists(temp_archive):
+            os.remove(temp_archive)
+        raise HTTPException(status_code=400, detail=f"Ошибка восстановления: {str(e)}")
+
+    if os.path.exists(temp_archive):
+        os.remove(temp_archive)
+
+    subprocess.Popen(
+        "sleep 1 && systemctl restart mtproto-web.service mtproto-guardian.service",
+        shell=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    return HTMLResponse(
+        content="""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><title>Восстановление</title>
+<meta http-equiv="refresh" content="3;url=/">
+<style>
+body { background:#0f172a; color:#f8fafc; font-family:sans-serif; text-align:center; padding-top:80px; }
+.spinner { width: 44px; height: 44px; border: 4px solid #334155; border-top: 4px solid #38bdf8; border-radius: 50%; margin: 20px auto; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+    <h2 style="color:#10b981;">✔ Резервная копия успешно восстановлена!</h2>
+    <div class="spinner"></div>
+    <p style="color:#94a3b8;">Портал перезапускается. Вы вернетесь в панель через 3 секунды...</p>
+</body></html>"""
     )
 
 @app.get("/sub/{token}/download/{filename}")
@@ -1037,15 +1093,18 @@ def dashboard(user: str = Depends(auth_user)):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.4</title>
+        <title>OOMKilled Portal v2.5</title>
         <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }}
             .container {{ max-width: 940px; margin: 0 auto; }}
             .header-bar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
             .actions {{ display: flex; gap: 10px; align-items: center; }}
-            .btn-backup {{ background: #0284c7; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; }}
+            .btn-backup {{ background: #0284c7; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; display: inline-flex; align-items: center; }}
             .btn-backup:hover {{ background: #0369a1; }}
+            .btn-restore-upload {{ background: #475569; color: #fff; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; }}
+            .btn-restore-upload:hover {{ background: #334155; }}
+            .btn-restore-upload input[type="file"] {{ display: none; }}
             .btn-logout {{ background: #ef4444; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; }}
             .btn-logout:hover {{ background: #dc2626; }}
             
@@ -1086,9 +1145,15 @@ def dashboard(user: str = Depends(auth_user)):
     <body>
         <div class="container">
             <div class="header-bar">
-                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.4</span></h1>
+                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.5</span></h1>
                 <div class="actions">
-                    <a href="/backup" class="btn-backup">Скачать Бэкап</a>
+                    <a href="/backup" class="btn-backup" title="Скачать архив бэкапа">📥 Скачать Бэкап</a>
+                    <form id="restore-form" action="/restore-backup" method="post" enctype="multipart/form-data" style="margin:0;">
+                        <label class="btn-restore-upload" title="Загрузить и восстановить архив бэкапа (.tar.gz)">
+                            <input type="file" name="backup_file" accept=".tar.gz,.gz" onchange="submitRestore(this)">
+                            📤 Восстановить бэкап
+                        </label>
+                    </form>
                     <a href="/logout" class="btn-logout">Выйти</a>
                 </div>
             </div>
@@ -1107,7 +1172,7 @@ def dashboard(user: str = Depends(auth_user)):
                 </div>
 
                 <div class="panel">
-                    <h3 style="margin-top:0;">Создать пользователя </h3>
+                    <h3 style="margin-top:0;">Создать пользователя</h3>
                     <form action="/add-user" method="post" class="form-grid">
                         <input type="text" name="username" placeholder="Имя пользователя" required>
                         <select name="days">
@@ -1196,6 +1261,16 @@ def dashboard(user: str = Depends(auth_user)):
                 document.querySelectorAll('.menu-section').forEach(s => s.classList.remove('active'));
                 btn.classList.add('active');
                 document.getElementById('section-' + sec).classList.add('active');
+            }}
+
+            function submitRestore(input) {{
+                if (input.files && input.files[0]) {{
+                    if (confirm("Вы уверены, что хотите восстановить базу данных из этого файла? Текущие данные будут перезаписаны!")) {{
+                        document.getElementById('restore-form').submit();
+                    }} else {{
+                        input.value = "";
+                    }}
+                }}
             }}
         </script>
     </body>
