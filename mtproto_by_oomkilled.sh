@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.7
+# Version     : 2.8
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.7"
+SCRIPT_VERSION="2.8"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -151,9 +151,10 @@ EOF
     fi
 
     cat <<'EOF' > "$INSTALL_DIR/guardian.py"
-import json, os, time
+import json, os, time, tempfile
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
+INSTALL_DIR = "/opt/mtproto_by_oomkilled"
 
 def check_expired_users():
     if not os.path.exists(DATA_PATH):
@@ -181,10 +182,13 @@ def check_expired_users():
 
     if changed:
         try:
-            with open(DATA_PATH, "w") as f:
-                json.dump(meta, f, indent=2)
+            with tempfile.NamedTemporaryFile("w", dir=INSTALL_DIR, delete=False) as tmp:
+                json.dump(meta, tmp, indent=2)
+                tmp_name = tmp.name
+            os.replace(tmp_name, DATA_PATH)
         except Exception:
-            pass
+            if 'tmp_name' in locals() and os.path.exists(tmp_name):
+                os.remove(tmp_name)
 
 if __name__ == "__main__":
     while True:
@@ -193,14 +197,15 @@ if __name__ == "__main__":
 EOF
 
     cat <<'EOF' > "$INSTALL_DIR/web_panel.py"
-import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile, subprocess
+import os, re, secrets, psutil, json, time, io, tarfile, shutil, zipfile, subprocess, tempfile
 from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.7")
+app = FastAPI(title="OOMKilled Portal v2.8")
 security = HTTPBasic()
 
+INSTALL_DIR = "/opt/mtproto_by_oomkilled"
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
 BRANDING_PATH = "/opt/mtproto_by_oomkilled/branding.json"
 VPN_DIR = "/opt/mtproto_by_oomkilled/vpn_configs"
@@ -234,8 +239,12 @@ def save_meta(meta_dict):
                         lines.append(line)
     for k, v in meta_dict.items():
         lines.append(f"{k}={v}\n")
-    with open(META_PATH, "w") as f:
-        f.writelines(lines)
+    
+    with tempfile.NamedTemporaryFile("w", dir="/etc", delete=False) as tmp:
+        tmp.writelines(lines)
+        tmp_name = tmp.name
+    os.replace(tmp_name, META_PATH)
+    os.chmod(META_PATH, 0o600)
 
 def get_users_meta():
     if os.path.exists(DATA_PATH):
@@ -247,8 +256,11 @@ def get_users_meta():
     return {}
 
 def save_users_meta(data):
-    with open(DATA_PATH, "w") as f:
-        json.dump(data, f, indent=2)
+    with tempfile.NamedTemporaryFile("w", dir=INSTALL_DIR, delete=False) as tmp:
+        json.dump(data, tmp, indent=2)
+        tmp_name = tmp.name
+    os.replace(tmp_name, DATA_PATH)
+    os.chmod(DATA_PATH, 0o600)
 
 def get_branding():
     default_b = {
@@ -273,8 +285,11 @@ def get_branding():
     return default_b
 
 def save_branding(data):
-    with open(BRANDING_PATH, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with tempfile.NamedTemporaryFile("w", dir=INSTALL_DIR, delete=False) as tmp:
+        json.dump(data, tmp, indent=2, ensure_ascii=False)
+        tmp_name = tmp.name
+    os.replace(tmp_name, BRANDING_PATH)
+    os.chmod(BRANDING_PATH, 0o644)
 
 def auth_user(credentials: HTTPBasicCredentials = Depends(security)):
     meta = get_meta()
@@ -353,6 +368,10 @@ async def restore_backup_web(backup_file: UploadFile = File(...), user: str = De
     try:
         with tarfile.open(temp_archive, "r:gz") as tar:
             members = tar.getnames()
+            for m in members:
+                if ".." in m or m.startswith("/"):
+                    raise Exception("Обнаружена попытка Path Traversal в архиве!")
+
             valid_names = {"users_meta.json", "mtproto_oomkilled.conf", "branding.json", "vpn_configs"}
             has_valid = any(any(m.startswith(v) for v in valid_names) for m in members)
             if not has_valid:
@@ -364,6 +383,12 @@ async def restore_backup_web(backup_file: UploadFile = File(...), user: str = De
                     tar.extract(member, path="/etc")
                 elif clean_name in ["users_meta.json", "branding.json"] or clean_name.startswith("vpn_configs"):
                     tar.extract(member, path="/opt/mtproto_by_oomkilled")
+        
+        if os.path.exists(DATA_PATH):
+            os.chmod(DATA_PATH, 0o600)
+        if os.path.exists(META_PATH):
+            os.chmod(META_PATH, 0o600)
+            
     except Exception as e:
         if os.path.exists(temp_archive):
             os.remove(temp_archive)
@@ -1149,7 +1174,7 @@ def dashboard(user: str = Depends(auth_user)):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.7</title>
+        <title>OOMKilled Portal v2.8</title>
         <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
             * {{ box-sizing: border-box; }}
@@ -1484,7 +1509,7 @@ def dashboard(user: str = Depends(auth_user)):
         <div class="container">
             <div class="header-bar">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <h2 style="margin:0; font-size:18px; color:#38bdf8; letter-spacing:-0.5px;">OOMKilled Portal <span style="font-size:12px; color:#94a3b8; font-weight:normal;">v2.7</span></h2>
+                    <h2 style="margin:0; font-size:18px; color:#38bdf8; letter-spacing:-0.5px;">OOMKilled Portal <span style="font-size:12px; color:#94a3b8; font-weight:normal;">v2.8</span></h2>
                 </div>
                 <div class="actions">
                     <a href="/backup" class="btn-nav">📥 Скачать бэкап</a>
@@ -1759,6 +1784,7 @@ async def upload_vpn_file(username: str = Form(...), file: UploadFile = File(...
         dest = os.path.join(u_dir, safe_filename)
         with open(dest, "wb") as f:
             shutil.copyfileobj(file.file, f)
+        os.chmod(dest, 0o600)
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.post("/delete-vpn-file")
@@ -1937,15 +1963,25 @@ fi
 create_backup() {
     echo -e "\n\e[34m=== Резервное копирование конфигурации ===\e[0m"
     mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
     local timestamp
     timestamp=$(date +%Y%m%d_%H%M%S)
     local archive_name="portal_backup_${timestamp}.tar.gz"
     local archive_path="${BACKUP_DIR}/${archive_name}"
 
     tar -czf "$archive_path" -C / opt/mtproto_by_oomkilled/users_meta.json opt/mtproto_by_oomkilled/branding.json opt/mtproto_by_oomkilled/vpn_configs etc/mtproto_oomkilled.conf 2>/dev/null || true
+    chmod 600 "$archive_path" 2>/dev/null || true
 
     if [[ -f "$archive_path" ]]; then
         echo -e "\e[32m✔ Бэкап успешно создан:\e[0m \e[33m$archive_path\e[0m"
+        
+        # Ротация: оставляем только 5 последних бэкапов
+        local backup_count
+        backup_count=$(ls -1t "${BACKUP_DIR}"/portal_backup_*.tar.gz 2>/dev/null | wc -l)
+        if [[ "$backup_count" -gt 5 ]]; then
+            echo "Ротация архивов: удаление старых копий..."
+            ls -1t "${BACKUP_DIR}"/portal_backup_*.tar.gz | tail -n +"6" | xargs rm -f
+        fi
     else
         echo -e "\e[31m✖ Ошибка создания бэкапа.\e[0m"
     fi
@@ -1960,8 +1996,15 @@ restore_backup() {
         return 1
     fi
 
+    # Проверка на безопасность архива (Path Traversal check)
+    if tar -tzf "$BACKUP_FILE" | grep -E '(^\.\./|/\.\./)'; then
+        echo -e "\e[31m✖ Ошибка: Архив содержит небезопасные относительные пути (Path Traversal)!\e[0m"
+        return 1
+    fi
+
     echo "Восстановление файлов..."
     tar -xzf "$BACKUP_FILE" -C /
+    chmod 600 "$USER_DATA_FILE" "$META_FILE" 2>/dev/null || true
     systemctl daemon-reload
     update_systemd_service
     systemctl restart mtproto-web.service mtproto-guardian.service
@@ -2011,6 +2054,7 @@ install_all() {
   }
 }
 EOF
+    chmod 600 "$USER_DATA_FILE"
 
     cat <<EOF > "$META_FILE"
 IP=$IP
@@ -2021,6 +2065,7 @@ USE_SSL=false
 SSL_TYPE=none
 DOMAIN_NAME=
 EOF
+    chmod 600 "$META_FILE"
 
     write_app_modules
     update_systemd_service
@@ -2119,6 +2164,7 @@ fix_and_restart() {
     fi
 
     chmod -R 755 "$INSTALL_DIR" 2>/dev/null || true
+    chmod 600 "$USER_DATA_FILE" "$META_FILE" 2>/dev/null || true
     update_systemd_service
     systemctl daemon-reload
     systemctl restart mtproto-web.service mtproto-guardian.service
