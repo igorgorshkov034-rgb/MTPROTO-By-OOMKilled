@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.5
+# Version     : 2.6
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.5"
+SCRIPT_VERSION="2.6"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -198,7 +198,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, F
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.5")
+app = FastAPI(title="OOMKilled Portal v2.6")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
@@ -280,29 +280,29 @@ def list_user_vpn_files(username: str):
 def get_file_badge(filename: str):
     lower = filename.lower()
     if lower.endswith(".conf") or "wireguard" in lower:
-        return ('<span style="background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35); '
-                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">🛡️ WG</span>')
+        return ('<span style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); '
+                'padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; margin-right:8px;">WG</span>')
     elif lower.endswith(".ovpn"):
-        return ('<span style="background:rgba(249,115,22,0.18); color:#fb923c; border:1px solid rgba(249,115,22,0.35); '
-                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">🔑 OVPN</span>')
+        return ('<span style="background:rgba(249,115,22,0.15); color:#fb923c; border:1px solid rgba(249,115,22,0.3); '
+                'padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; margin-right:8px;">OVPN</span>')
     elif lower.endswith(".json"):
-        return ('<span style="background:rgba(168,85,247,0.18); color:#c084fc; border:1px solid rgba(168,85,247,0.35); '
-                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">⚡ JSON</span>')
+        return ('<span style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); '
+                'padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; margin-right:8px;">JSON</span>')
     elif lower.endswith(".zip") or lower.endswith(".tar.gz") or lower.endswith(".rar"):
-        return ('<span style="background:rgba(245,158,11,0.18); color:#fbbf24; border:1px solid rgba(245,158,11,0.35); '
-                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">📦 ZIP</span>')
+        return ('<span style="background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3); '
+                'padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; margin-right:8px;">ZIP</span>')
     else:
-        return ('<span style="background:rgba(148,163,184,0.18); color:#cbd5e1; border:1px solid rgba(148,163,184,0.35); '
-                'padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; margin-right:6px;">📄 FILE</span>')
+        return ('<span style="background:rgba(148,163,184,0.15); color:#cbd5e1; border:1px solid rgba(148,163,184,0.3); '
+                'padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; margin-right:8px;">FILE</span>')
 
 @app.get("/logout")
 def logout():
     return HTMLResponse(
         content="""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="UTF-8"><title>Выход</title></head>
-<body style="background:#0f172a; color:#f8fafc; font-family:sans-serif; text-align:center; padding-top:60px;">
-    <h2>Вы успешно вышли из панели</h2>
-    <p><a href="/" style="color:#38bdf8; text-decoration:none; font-weight:bold;">Войти снова</a></p>
+<body style="background:#090d16; color:#f8fafc; font-family:system-ui, sans-serif; text-align:center; padding-top:80px;">
+    <h2 style="font-weight:700;">Вы вышли из сессии</h2>
+    <p><a href="/" style="color:#38bdf8; text-decoration:none; font-weight:600; padding:8px 16px; background:rgba(56,189,248,0.1); border-radius:8px; border:1px solid rgba(56,189,248,0.25);">Войти снова</a></p>
 </body></html>""",
         status_code=401,
         headers={"WWW-Authenticate": "Basic"}
@@ -339,7 +339,7 @@ async def restore_backup_web(backup_file: UploadFile = File(...), user: str = De
             valid_names = {"users_meta.json", "mtproto_oomkilled.conf", "branding.json", "vpn_configs"}
             has_valid = any(any(m.startswith(v) for v in valid_names) for m in members)
             if not has_valid:
-                raise Exception("Некорректный формат архива бэкапа")
+                raise Exception("Некорректная структура архива бэкапа")
 
             for member in tar.getmembers():
                 clean_name = os.path.normpath(member.name).lstrip("/")
@@ -350,7 +350,7 @@ async def restore_backup_web(backup_file: UploadFile = File(...), user: str = De
     except Exception as e:
         if os.path.exists(temp_archive):
             os.remove(temp_archive)
-        raise HTTPException(status_code=400, detail=f"Ошибка восстановления: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Ошибка распаковки: {str(e)}")
 
     if os.path.exists(temp_archive):
         os.remove(temp_archive)
@@ -367,15 +367,15 @@ async def restore_backup_web(backup_file: UploadFile = File(...), user: str = De
 <html lang="ru"><head><meta charset="UTF-8"><title>Восстановление</title>
 <meta http-equiv="refresh" content="3;url=/">
 <style>
-body { background:#0f172a; color:#f8fafc; font-family:sans-serif; text-align:center; padding-top:80px; }
-.spinner { width: 44px; height: 44px; border: 4px solid #334155; border-top: 4px solid #38bdf8; border-radius: 50%; margin: 20px auto; animation: spin 1s linear infinite; }
+body { background:#090d16; color:#f8fafc; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding-top:90px; }
+.spinner { width: 44px; height: 44px; border: 3px solid rgba(255,255,255,0.08); border-top: 3px solid #38bdf8; border-radius: 50%; margin: 24px auto; animation: spin 0.8s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-    <h2 style="color:#10b981;">✔ Резервная копия успешно восстановлена!</h2>
+    <h2 style="color:#10b981; font-weight:700;">Резервная копия успешно восстановлена</h2>
     <div class="spinner"></div>
-    <p style="color:#94a3b8;">Портал перезапускается. Вы вернетесь в панель через 3 секунды...</p>
+    <p style="color:#94a3b8; font-size:14px;">Перезапуск сервисов... Перенаправление в панель управления через 3 секунды</p>
 </body></html>"""
     )
 
@@ -460,15 +460,15 @@ def subscription_page(token: str):
         days_str = "На паузе"
         progress_percent = 0
     elif exp > 0 and now > exp:
-        status_text = "Срок действия истёк"
+        status_text = "Срок истёк"
         status_badge_class = "badge-expired"
         days_str = "Истекла"
         progress_percent = 100
-        progress_color = "linear-gradient(90deg, #ef4444, #dc2626)"
+        progress_color = "linear-gradient(90deg, #ef4444, #f43f5e)"
     elif exp == 0:
         status_text = "Активна"
         status_badge_class = "badge-active"
-        days_str = "Бессрочный доступ"
+        days_str = "Бессрочно"
         progress_percent = 100
         progress_color = "linear-gradient(90deg, #10b981, #06b6d4)"
     else:
@@ -487,21 +487,21 @@ def subscription_page(token: str):
     proxy_block = ""
     if proxy_url:
         proxy_block = f"""
-        <div style="margin-top: 15px;">
-            <a href="{proxy_url}" class="glass-btn glass-btn-tg">
-                <span>✈️ Подключить в Telegram</span>
+        <div style="margin-top: 14px;">
+            <a href="{proxy_url}" class="glass-btn glass-btn-primary">
+                <span>Подключить в Telegram</span>
             </a>
-            <div class="glass-code">{proxy_url}</div>
+            <div class="glass-code-block">{proxy_url}</div>
         </div>
         """
 
     key_block = ""
     if custom_key:
         key_block = f"""
-        <div class="glass-subcard">
+        <div class="glass-subcard" style="margin-top: 14px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="font-weight:600; font-size:13px; color:#94a3b8;">🔑 Ключ конфигурации:</span>
-                <button type="button" class="btn-copy" onclick="copyKey()">Скопировать</button>
+                <span style="font-weight:600; font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Ключ доступа</span>
+                <button type="button" class="btn-copy-tag" onclick="copyKey()">Скопировать</button>
             </div>
             <textarea id="key-text" class="glass-textarea" readonly>{custom_key}</textarea>
         </div>
@@ -513,13 +513,13 @@ def subscription_page(token: str):
         zip_btn_html = ""
         if len(vpn_files) > 1:
             zip_btn_html = f"""
-            <a href="/sub/{token}/download-all-zip" class="btn-zip-all" download>📦 Скачать все (ZIP)</a>
+            <a href="/sub/{token}/download-all-zip" class="btn-zip-download" download>Архив (.ZIP)</a>
             """
 
         vpn_files_html += f"""
-        <div class='glass-subcard' style="margin-top: 20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <span style='font-size:14px; font-weight:600; color:#cbd5e1;'>📁 Файлы конфигураций</span>
+        <div class='glass-subcard' style="margin-top: 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style='font-size:13px; font-weight:600; color:#e2e8f0; text-transform:uppercase; letter-spacing:0.5px;'>Файлы конфигураций</span>
                 {zip_btn_html}
             </div>
         """
@@ -527,12 +527,12 @@ def subscription_page(token: str):
             dl_url = f"/sub/{token}/download/{f_name}"
             badge_icon = get_file_badge(f_name)
             vpn_files_html += f"""
-            <div class='vpn-item'>
-                <div style="display:flex; align-items:center;">
+            <div class='vpn-item-row'>
+                <div style="display:flex; align-items:center; overflow:hidden; text-overflow:ellipsis;">
                     {badge_icon}
-                    <span style='font-family:monospace; font-size:13px; color:#e2e8f0;'>{f_name}</span>
+                    <span style='font-family:ui-monospace, monospace; font-size:13px; color:#f1f5f9; white-space:nowrap;'>{f_name}</span>
                 </div>
-                <a href='{dl_url}' class='btn-download' download>Скачать</a>
+                <a href='{dl_url}' class='btn-file-dl' download>Скачать</a>
             </div>
             """
         vpn_files_html += "</div>"
@@ -548,16 +548,16 @@ def subscription_page(token: str):
     app_macos = branding.get("app_macos", "").strip()
     app_linux = branding.get("app_linux", "").strip()
 
-    btn_app_ios = f'<a href="{app_ios}" target="_blank" class="glass-app-btn">📲 Скачать приложение для iOS</a>' if app_ios else ""
-    btn_app_android = f'<a href="{app_android}" target="_blank" class="glass-app-btn">📲 Скачать приложение для Android</a>' if app_android else ""
+    btn_app_ios = f'<a href="{app_ios}" target="_blank" class="glass-app-link">Скачать для iOS</a>' if app_ios else ""
+    btn_app_android = f'<a href="{app_android}" target="_blank" class="glass-app-link">Скачать для Android</a>' if app_android else ""
     
     desktop_btns = []
     if app_windows:
-        desktop_btns.append(f'<a href="{app_windows}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🪟 Скачать для Windows</a>')
+        desktop_btns.append(f'<a href="{app_windows}" target="_blank" class="glass-app-link" style="margin-top:8px;">Скачать для Windows</a>')
     if app_macos:
-        desktop_btns.append(f'<a href="{app_macos}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🍏 Скачать для macOS</a>')
+        desktop_btns.append(f'<a href="{app_macos}" target="_blank" class="glass-app-link" style="margin-top:8px;">Скачать для macOS</a>')
     if app_linux:
-        desktop_btns.append(f'<a href="{app_linux}" target="_blank" class="glass-app-btn" style="margin-top:8px;">🐧 Скачать для Linux</a>')
+        desktop_btns.append(f'<a href="{app_linux}" target="_blank" class="glass-app-link" style="margin-top:8px;">Скачать для Linux</a>')
     btns_app_desktop = "".join(desktop_btns)
 
     return f"""<!DOCTYPE html>
@@ -570,8 +570,8 @@ def subscription_page(token: str):
     <style>
         * {{ box-sizing: border-box; }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #090d16;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #080c14;
             color: #f8fafc;
             margin: 0;
             padding: 24px 16px;
@@ -583,80 +583,88 @@ def subscription_page(token: str):
             overflow-x: hidden;
         }}
 
-        .ambient-bg-1 {{
+        .ambient-orb-1 {{
             position: fixed;
-            width: 320px;
-            height: 320px;
+            width: 380px;
+            height: 380px;
             background: radial-gradient(circle, rgba(56, 189, 248, 0.22) 0%, rgba(0,0,0,0) 70%);
-            top: 5%;
-            left: 10%;
+            top: -60px;
+            left: -60px;
             z-index: 0;
-            filter: blur(40px);
+            filter: blur(50px);
             pointer-events: none;
+            animation: orbFloat 14s ease-in-out infinite alternate;
         }}
-        .ambient-bg-2 {{
+        .ambient-orb-2 {{
             position: fixed;
-            width: 340px;
-            height: 340px;
-            background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(0,0,0,0) 70%);
-            bottom: 5%;
-            right: 10%;
+            width: 420px;
+            height: 420px;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, rgba(0,0,0,0) 70%);
+            bottom: -60px;
+            right: -60px;
             z-index: 0;
-            filter: blur(40px);
+            filter: blur(60px);
             pointer-events: none;
+            animation: orbFloat 18s ease-in-out infinite alternate-reverse;
+        }}
+
+        @keyframes orbFloat {{
+            0% {{ transform: translate(0, 0); }}
+            100% {{ transform: translate(40px, 40px); }}
         }}
 
         .glass-card {{
             position: relative;
             z-index: 1;
-            max-width: 480px;
+            max-width: 460px;
             width: 100%;
-            background: rgba(17, 24, 39, 0.72);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 20px;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border-radius: 24px;
             padding: 28px 24px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.12);
         }}
 
         h2 {{
             color: #f8fafc;
-            margin: 0 0 16px 0;
+            margin: 0 0 14px 0;
             text-align: center;
             font-size: 22px;
             font-weight: 700;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.4px;
         }}
 
         .user-pill {{
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 6px 14px;
-            border-radius: 30px;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 5px 14px;
+            border-radius: 40px;
             font-size: 13px;
             border: 1px solid rgba(255, 255, 255, 0.08);
         }}
 
         .status-badge {{
-            padding: 3px 8px;
-            border-radius: 12px;
+            padding: 3px 9px;
+            border-radius: 20px;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.4px;
         }}
-        .badge-active {{ background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }}
-        .badge-paused {{ background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
-        .badge-expired {{ background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
+        .badge-active {{ background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }}
+        .badge-paused {{ background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+        .badge-expired {{ background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
 
         .progress-box {{
             margin: 18px 0 20px 0;
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 14px;
-            padding: 12px 14px;
+            border-radius: 16px;
+            padding: 12px 16px;
         }}
         .progress-meta {{
             display: flex;
@@ -667,14 +675,14 @@ def subscription_page(token: str):
         }}
         .progress-track {{
             width: 100%;
-            height: 8px;
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 6px;
+            height: 7px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
             overflow: hidden;
         }}
         .progress-fill {{
             height: 100%;
-            border-radius: 6px;
+            border-radius: 10px;
             transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }}
 
@@ -684,155 +692,160 @@ def subscription_page(token: str):
             justify-content: center;
             width: 100%;
             padding: 12px 18px;
-            border-radius: 12px;
+            border-radius: 14px;
             text-decoration: none;
             font-weight: 600;
-            font-size: 15px;
-            transition: all 0.2s;
+            font-size: 14px;
+            transition: all 0.2s ease;
             cursor: pointer;
             border: none;
         }}
-        .glass-btn-tg {{
-            background: linear-gradient(135deg, #0284c7, #2563eb);
+        .glass-btn-primary {{
+            background: linear-gradient(135deg, #0ea5e9, #3b82f6);
             color: #fff;
-            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+            box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
         }}
-        .glass-btn-tg:hover {{
+        .glass-btn-primary:hover {{
+            box-shadow: 0 6px 22px rgba(14, 165, 233, 0.5);
             transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5);
         }}
         .glass-btn-support {{
             margin-top: 14px;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.04);
             color: #94a3b8;
             border: 1px solid rgba(255, 255, 255, 0.08);
             font-size: 13px;
         }}
         .glass-btn-support:hover {{
-            background: rgba(255, 255, 255, 0.09);
+            background: rgba(255, 255, 255, 0.08);
             color: #f8fafc;
+            border-color: rgba(255, 255, 255, 0.15);
         }}
 
-        .glass-app-btn {{
+        .glass-app-link {{
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            background: rgba(56, 189, 248, 0.12);
+            background: rgba(56, 189, 248, 0.08);
             color: #38bdf8;
-            border: 1px solid rgba(56, 189, 248, 0.28);
-            border-radius: 10px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 12px;
             padding: 10px 14px;
             font-size: 13px;
             font-weight: 600;
             text-decoration: none;
-            margin-top: 12px;
-            transition: all 0.2s;
+            margin-top: 10px;
+            transition: all 0.2s ease;
         }}
-        .glass-app-btn:hover {{
-            background: rgba(56, 189, 248, 0.22);
-            transform: translateY(-1px);
+        .glass-app-link:hover {{
+            background: rgba(56, 189, 248, 0.16);
+            border-color: rgba(56, 189, 248, 0.35);
         }}
 
-        .glass-code {{
-            background: rgba(0, 0, 0, 0.4);
+        .glass-code-block {{
+            background: rgba(0, 0, 0, 0.35);
             padding: 8px 12px;
-            border-radius: 8px;
-            font-family: monospace;
+            border-radius: 10px;
+            font-family: ui-monospace, monospace;
             font-size: 11px;
             color: #94a3b8;
             margin-top: 8px;
             word-break: break-all;
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }}
 
         .glass-subcard {{
-            background: rgba(0, 0, 0, 0.28);
+            background: rgba(0, 0, 0, 0.25);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-            padding: 12px 14px;
-            margin-top: 14px;
+            border-radius: 16px;
+            padding: 14px;
         }}
         .glass-textarea {{
             width: 100%;
-            height: 60px;
-            background: rgba(0, 0, 0, 0.45);
+            height: 56px;
+            background: rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
+            border-radius: 10px;
             color: #38bdf8;
-            font-family: monospace;
+            font-family: ui-monospace, monospace;
             font-size: 12px;
-            padding: 8px;
+            padding: 8px 10px;
             resize: none;
+            outline: none;
         }}
-        .btn-copy {{
-            background: rgba(56, 189, 248, 0.15);
+        .btn-copy-tag {{
+            background: rgba(56, 189, 248, 0.12);
             color: #38bdf8;
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            border-radius: 6px;
-            padding: 4px 10px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 8px;
+            padding: 3px 10px;
             font-size: 11px;
             font-weight: 600;
             cursor: pointer;
             transition: 0.2s;
         }}
-        .btn-copy:hover {{ background: rgba(56, 189, 248, 0.3); }}
+        .btn-copy-tag:hover {{ background: rgba(56, 189, 248, 0.24); }}
 
-        .vpn-item {{
+        .vpn-item-row {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         }}
-        .vpn-item:last-child {{ border-bottom: none; }}
-        .btn-download {{
+        .vpn-item-row:last-child {{ border-bottom: none; }}
+        .btn-file-dl {{
             background: rgba(99, 102, 241, 0.15);
             color: #818cf8;
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.25);
             text-decoration: none;
             padding: 4px 10px;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 11px;
             font-weight: 600;
+            transition: 0.2s;
         }}
-        .btn-download:hover {{ background: rgba(99, 102, 241, 0.3); }}
-        .btn-zip-all {{
-            background: rgba(56, 189, 248, 0.15);
+        .btn-file-dl:hover {{ background: rgba(99, 102, 241, 0.3); }}
+        .btn-zip-download {{
+            background: rgba(56, 189, 248, 0.12);
             color: #38bdf8;
-            border: 1px solid rgba(56, 189, 248, 0.3);
+            border: 1px solid rgba(56, 189, 248, 0.25);
             text-decoration: none;
-            padding: 4px 10px;
-            border-radius: 6px;
+            padding: 3px 9px;
+            border-radius: 8px;
             font-size: 11px;
             font-weight: 600;
         }}
 
-        .tabs {{
+        .segmented-tabs {{
             display: flex;
-            gap: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 3px;
             margin-top: 22px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            padding-bottom: 8px;
         }}
         .tab-btn {{
+            flex: 1;
             background: none;
             border: none;
             color: #64748b;
             font-weight: 600;
             cursor: pointer;
-            padding: 6px 12px;
-            border-radius: 6px;
+            padding: 8px 0;
+            border-radius: 9px;
             font-size: 13px;
-            transition: 0.2s;
+            transition: all 0.2s ease;
         }}
         .tab-btn.active {{
             background: rgba(255, 255, 255, 0.08);
-            color: #38bdf8;
+            color: #f8fafc;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }}
         .tab-content {{
             display: none;
-            padding: 12px 0 0 0;
+            padding: 14px 2px 0 2px;
             font-size: 13px;
             line-height: 1.6;
             color: #94a3b8;
@@ -845,18 +858,16 @@ def subscription_page(token: str):
             left: 50%;
             transform: translateX(-50%) translateY(80px);
             background: rgba(15, 23, 42, 0.95);
-            border: 1px solid rgba(56, 189, 248, 0.4);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            backdrop-filter: blur(12px);
             color: #f8fafc;
-            padding: 10px 18px;
+            padding: 10px 20px;
             border-radius: 30px;
             font-size: 13px;
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6);
             opacity: 0;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1000;
             pointer-events: none;
         }}
@@ -867,22 +878,22 @@ def subscription_page(token: str):
     </style>
 </head>
 <body>
-    <div class="ambient-bg-1"></div>
-    <div class="ambient-bg-2"></div>
+    <div class="ambient-orb-1"></div>
+    <div class="ambient-orb-2"></div>
 
     <div class="glass-card">
         <h2>{branding.get('service_name', 'Portal')}</h2>
         
-        <div style="text-align: center; margin-bottom: 12px;">
+        <div style="text-align: center; margin-bottom: 14px;">
             <div class="user-pill">
-                <span>👤 <strong>{target_name}</strong></span>
+                <span>{target_name}</span>
                 <span class="status-badge {status_badge_class}">{status_text}</span>
             </div>
         </div>
 
         <div class="progress-box">
             <div class="progress-meta">
-                <span>Срок действия</span>
+                <span>Период действия</span>
                 <span style="color:#f8fafc; font-weight:600;">{days_str}</span>
             </div>
             <div class="progress-track">
@@ -894,9 +905,9 @@ def subscription_page(token: str):
         {key_block}
         {vpn_files_html}
 
-        {f'<a href="{support_url}" target="_blank" class="glass-btn glass-btn-support">💬 Связаться с техподдержкой</a>' if support_url else ''}
+        {f'<a href="{support_url}" target="_blank" class="glass-btn glass-btn-support">Техническая поддержка</a>' if support_url else ''}
 
-        <div class="tabs">
+        <div class="segmented-tabs">
             <button class="tab-btn active" onclick="showTab('ios', this)">iOS</button>
             <button class="tab-btn" onclick="showTab('android', this)">Android</button>
             <button class="tab-btn" onclick="showTab('desktop', this)">ПК</button>
@@ -916,7 +927,7 @@ def subscription_page(token: str):
     </div>
 
     <div id="toast" class="toast">
-        <span style="color:#10b981;">✓</span> Ключ скопирован в буфер обмена
+        <span style="color:#10b981; margin-right:6px;">✓</span> Скопировано в буфер обмена
     </div>
 
     <script>
@@ -942,7 +953,7 @@ def subscription_page(token: str):
             toast.classList.add('show');
             setTimeout(() => {{
                 toast.classList.remove('show');
-            }}, 2400);
+            }}, 2200);
         }}
     </script>
 </body>
@@ -978,26 +989,26 @@ def dashboard(user: str = Depends(auth_user)):
         u_status = u_info.get("status", "active")
 
         if u_status == "paused":
-            exp_str = "<span style='color:#f59e0b;'>На паузе</span>"
-            badge_color = "#f59e0b"
-            pause_btn_text = "Включить"
-            pause_btn_color = "#10b981"
+            exp_str = "<span style='color:#f59e0b;'>Пауза</span>"
+            badge_dot = "#f59e0b"
+            pause_btn_text = "Возобновить"
+            pause_btn_style = "background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);"
         elif exp == 0:
             exp_str = "<span style='color:#10b981;'>Бессрочно</span>"
-            badge_color = "#10b981"
+            badge_dot = "#10b981"
             pause_btn_text = "Пауза"
-            pause_btn_color = "#f59e0b"
+            pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
         elif now > exp:
             exp_str = "<span style='color:#ef4444;'>Истёк</span>"
-            badge_color = "#ef4444"
+            badge_dot = "#ef4444"
             pause_btn_text = "Пауза"
-            pause_btn_color = "#f59e0b"
+            pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
         else:
             days_left = max(1, int((exp - now) / 86400))
             exp_str = f"<span style='color:#38bdf8;'>Осталось {days_left} дн.</span>"
-            badge_color = "#10b981"
+            badge_dot = "#10b981"
             pause_btn_text = "Пауза"
-            pause_btn_color = "#f59e0b"
+            pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
 
         attached_files = list_user_vpn_files(u_name)
         files_chips = ""
@@ -1006,175 +1017,417 @@ def dashboard(user: str = Depends(auth_user)):
             files_chips += f"""
             <span class="file-chip">
                 {chip_badge}
-                <span style="font-family:monospace;">{af}</span>
-                <form action="/delete-vpn-file" method="post" style="margin:0;">
+                <span style="font-family:ui-monospace, monospace; font-size:12px;">{af}</span>
+                <form action="/delete-vpn-file" method="post" style="margin:0; display:inline;">
                     <input type="hidden" name="username" value="{u_name}">
                     <input type="hidden" name="filename" value="{af}">
-                    <button type="submit" class="file-chip-del" title="Удалить файл">✕</button>
+                    <button type="submit" class="file-chip-del" title="Удалить">✕</button>
                 </form>
             </span>
             """
 
         user_cards += f"""
-        <div class="card">
+        <div class="user-card">
             <div class="user-header">
-                <div>
-                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:{badge_color}; margin-right:6px;"></span>
-                    <strong style="font-size:15px;">{u_name}</strong>
-                    <span style="font-size:12px; color:#94a3b8; margin-left:10px;">Срок: {exp_str}</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="width:8px; height:8px; border-radius:50%; background:{badge_dot}; display:inline-block;"></span>
+                    <strong style="font-size:16px; color:#f8fafc;">{u_name}</strong>
+                    <span style="font-size:12px; color:#94a3b8; margin-left:4px;">{exp_str}</span>
                 </div>
                 <div style="display:flex; gap:6px;">
                     <form action="/renew-user" method="post" style="margin:0;">
                         <input type="hidden" name="username" value="{u_name}">
-                        <button type="submit" class="btn-action" style="background:#10b981;">+30 дней</button>
+                        <button type="submit" class="btn-micro" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);">+30 дн</button>
                     </form>
                     <form action="/toggle-pause" method="post" style="margin:0;">
                         <input type="hidden" name="username" value="{u_name}">
-                        <button type="submit" class="btn-action" style="background:{pause_btn_color};">{pause_btn_text}</button>
+                        <button type="submit" class="btn-micro" style="{pause_btn_style}">{pause_btn_text}</button>
                     </form>
                     <form action="/delete-user" method="post" style="margin:0;">
                         <input type="hidden" name="username" value="{u_name}">
-                        <button type="submit" class="btn-action btn-del">Удалить</button>
+                        <button type="submit" class="btn-micro btn-micro-danger">Удалить</button>
                     </form>
                 </div>
             </div>
 
-            <div style="font-size:12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <span style="color:#94a3b8;">Ссылка клиента:</span> 
-                    <a href="{sub_url}" target="_blank" style="color:#38bdf8; word-break:break-all;">{sub_url}</a>
-                </div>
-                <a href="{sub_url}" target="_blank" class="btn-sub">Открыть страницу</a>
+            <div class="sub-link-row">
+                <span class="sub-url-text">{sub_url}</span>
+                <a href="{sub_url}" target="_blank" class="btn-open-link">Открыть ↗</a>
             </div>
 
-            <form action="/update-proxy-url" method="post" style="margin-bottom:8px;">
+            <form action="/update-proxy-url" method="post" class="input-action-group">
                 <input type="hidden" name="username" value="{u_name}">
-                <div style="display:flex; gap:8px;">
-                    <input type="text" name="proxy_url" value="{proxy_url}" placeholder="Ссылка Telegram-прокси (tg://proxy?server=...)" style="flex:1; padding:6px 10px; font-size:12px;">
-                    <button type="submit" style="padding:6px 12px; font-size:12px; background:#0284c7;">Сохранить прокси</button>
-                </div>
+                <input type="text" name="proxy_url" value="{proxy_url}" placeholder="TG прокси (tg://proxy?server=...)" class="input-embedded">
+                <button type="submit" class="btn-embedded">TG Прокси</button>
             </form>
 
-            <form action="/update-key" method="post" style="margin-bottom:10px;">
+            <form action="/update-key" method="post" class="input-action-group">
                 <input type="hidden" name="username" value="{u_name}">
-                <div style="display:flex; gap:8px;">
-                    <input type="text" name="custom_key" value="{custom_key}" placeholder="Ключ VPN / подписка (VLESS, Shadowsocks и др.)" style="flex:1; padding:6px 10px; font-size:12px; font-family:monospace;">
-                    <button type="submit" style="padding:6px 12px; font-size:12px; background:#6366f1;">Сохранить ключ</button>
-                </div>
+                <input type="text" name="custom_key" value="{custom_key}" placeholder="Ключ подписки (VLESS, SS, Clash...)" class="input-embedded" style="font-family:ui-monospace, monospace;">
+                <button type="submit" class="btn-embedded" style="background:#4f46e5;">Ключ</button>
             </form>
 
             <div class="vpn-attach-zone">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <span style="color:#94a3b8; font-weight:600;">VPN-файлы клиента:</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="color:#94a3b8; font-size:12px; font-weight:600; text-transform:uppercase;">Файлы клиента</span>
                     <form action="/upload-vpn-file" method="post" enctype="multipart/form-data" style="margin:0;">
                         <input type="hidden" name="username" value="{u_name}">
-                        <label class="custom-file-upload">
+                        <label class="btn-upload-label">
                             <input type="file" name="file" onchange="this.form.submit()" required>
-                            📎 Прикрепить файл
+                            + Прикрепить файл
                         </label>
                     </form>
                 </div>
                 <div class="chips-container">
-                    {files_chips if files_chips else '<span style="color:#64748b; font-size:11px;">Нет прикрепленных файлов</span>'}
+                    {files_chips if files_chips else '<span style="color:#475569; font-size:12px;">Нет загруженных файлов</span>'}
                 </div>
             </div>
         </div>
         """
 
     if use_ssl and ssl_type == "letsencrypt":
-        ssl_status_badge = f"<span style='color:#10b981; font-weight:bold;'>Let's Encrypt ({domain_name})</span>"
+        ssl_status_badge = f"<span style='color:#10b981;'>Let's Encrypt ({domain_name})</span>"
     elif use_ssl:
-        ssl_status_badge = "<span style='color:#38bdf8; font-weight:bold;'>Самоподписанный SSL</span>"
+        ssl_status_badge = "<span style='color:#38bdf8;'>Самоподписанный HTTPS</span>"
     else:
-        ssl_status_badge = "<span style='color:#f59e0b;'>HTTP (без SSL)</span>"
+        ssl_status_badge = "<span style='color:#f59e0b;'>HTTP</span>"
 
     html = f"""<!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.5</title>
+        <title>OOMKilled Portal v2.6</title>
         <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }}
-            .container {{ max-width: 940px; margin: 0 auto; }}
-            .header-bar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
-            .actions {{ display: flex; gap: 10px; align-items: center; }}
-            .btn-backup {{ background: #0284c7; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; display: inline-flex; align-items: center; }}
-            .btn-backup:hover {{ background: #0369a1; }}
-            .btn-restore-upload {{ background: #475569; color: #fff; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; }}
-            .btn-restore-upload:hover {{ background: #334155; }}
-            .btn-restore-upload input[type="file"] {{ display: none; }}
-            .btn-logout {{ background: #ef4444; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; }}
-            .btn-logout:hover {{ background: #dc2626; }}
-            
-            .main-nav {{ display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 4px; }}
-            .nav-tab {{ background: transparent; border: none; color: #94a3b8; font-size: 15px; font-weight: bold; padding: 10px 18px; border-radius: 8px 8px 0 0; cursor: pointer; transition: 0.2s; }}
-            .nav-tab:hover {{ color: #f8fafc; background: #1e293b; }}
-            .nav-tab.active {{ color: #38bdf8; background: #1e293b; border-bottom: 3px solid #38bdf8; }}
+            * {{ box-sizing: border-box; }}
+            body {{
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background: #080c14;
+                color: #f8fafc;
+                margin: 0;
+                padding: 24px 20px;
+                min-height: 100vh;
+            }}
+            .container {{ max-width: 1040px; margin: 0 auto; }}
+
+            .header-bar {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 24px;
+                background: rgba(15, 23, 42, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 18px;
+                padding: 14px 20px;
+                backdrop-filter: blur(12px);
+            }}
+            .actions {{ display: flex; gap: 8px; align-items: center; }}
+            .btn-nav {{
+                background: rgba(255, 255, 255, 0.05);
+                color: #cbd5e1;
+                text-decoration: none;
+                padding: 8px 14px;
+                border-radius: 10px;
+                font-size: 13px;
+                font-weight: 600;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                transition: 0.2s;
+                cursor: pointer;
+            }}
+            .btn-nav:hover {{ background: rgba(255, 255, 255, 0.1); color: #fff; }}
+            .btn-nav input[type="file"] {{ display: none; }}
+            .btn-logout {{
+                background: rgba(239, 68, 68, 0.15);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.25);
+            }}
+            .btn-logout:hover {{ background: rgba(239, 68, 68, 0.25); color: #fff; }}
+
+            .main-nav {{
+                display: flex;
+                gap: 8px;
+                margin-bottom: 24px;
+                background: rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                padding: 4px;
+                width: fit-content;
+            }}
+            .nav-tab {{
+                background: transparent;
+                border: none;
+                color: #64748b;
+                font-size: 14px;
+                font-weight: 600;
+                padding: 8px 18px;
+                border-radius: 9px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }}
+            .nav-tab.active {{
+                color: #f8fafc;
+                background: rgba(255, 255, 255, 0.08);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            }}
             .menu-section {{ display: none; }}
             .menu-section.active {{ display: block; }}
 
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }}
-            .stat-box {{ background: #1e293b; padding: 18px; border-radius: 12px; border: 1px solid #334155; text-align: center; }}
-            .stat-val {{ font-size: 24px; font-weight: bold; color: #38bdf8; margin-top: 5px; }}
-            .panel {{ background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 25px; }}
-            .form-grid {{ display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-top: 15px; }}
-            input, select, textarea {{ padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-family: inherit; }}
-            button {{ background: #0284c7; color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }}
-            button:hover {{ background: #0369a1; }}
-            .card {{ background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 12px; }}
-            .user-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
-            .btn-action {{ padding: 5px 9px; font-size: 11px; border-radius: 4px; }}
-            .btn-del {{ background: #ef4444; }}
-            .btn-del:hover {{ background: #dc2626; }}
-            .btn-sub {{ display: inline-block; background: #6366f1; color: #fff; text-decoration: none; padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
-            .brand-field {{ margin-bottom: 15px; }}
-            .brand-field label {{ display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; font-weight: 600; }}
-            
-            .vpn-attach-zone {{ background: #080d1a; border: 1px dashed #334155; border-radius: 8px; padding: 10px 14px; margin-top: 10px; }}
-            .custom-file-upload {{ display: inline-flex; align-items: center; background: #3b82f6; color: #fff; padding: 5px 12px; border-radius: 5px; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; }}
-            .custom-file-upload:hover {{ background: #2563eb; }}
-            .custom-file-upload input[type="file"] {{ display: none; }}
-            .chips-container {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
-            .file-chip {{ background: #1e293b; border: 1px solid #475569; padding: 4px 10px; border-radius: 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; color: #e2e8f0; }}
-            .file-chip-del {{ background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1; }}
-            .file-chip-del:hover {{ color: #f87171; }}
+            .grid-stats {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 14px;
+                margin-bottom: 24px;
+            }}
+            .stat-box {{
+                background: rgba(15, 23, 42, 0.45);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 16px 20px;
+                border-radius: 16px;
+                backdrop-filter: blur(10px);
+            }}
+            .stat-title {{ font-size: 13px; color: #94a3b8; font-weight: 500; }}
+            .stat-val {{ font-size: 24px; font-weight: 700; color: #38bdf8; margin-top: 4px; }}
+
+            .panel {{
+                background: rgba(15, 23, 42, 0.45);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 22px;
+                border-radius: 18px;
+                margin-bottom: 24px;
+                backdrop-filter: blur(12px);
+            }}
+            .panel-title {{
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 700;
+                color: #f8fafc;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }}
+
+            .form-grid {{
+                display: grid;
+                grid-template-columns: 2fr 1fr 2fr auto;
+                gap: 10px;
+            }}
+            input, select, textarea {{
+                background: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: #fff;
+                padding: 10px 14px;
+                border-radius: 10px;
+                font-size: 13px;
+                font-family: inherit;
+                outline: none;
+                transition: 0.2s;
+            }}
+            input:focus, select:focus, textarea:focus {{
+                border-color: rgba(56, 189, 248, 0.5);
+                box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.2);
+            }}
+            .btn-submit {{
+                background: #0ea5e9;
+                color: #fff;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: 0.2s;
+            }}
+            .btn-submit:hover {{ background: #0284c7; }}
+
+            .users-container-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+                gap: 16px;
+            }}
+            .user-card {{
+                background: rgba(11, 17, 32, 0.6);
+                border: 1px solid rgba(255, 255, 255, 0.07);
+                border-radius: 16px;
+                padding: 18px;
+            }}
+            .user-header {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 12px;
+            }}
+            .btn-micro {{
+                padding: 4px 8px;
+                font-size: 11px;
+                font-weight: 600;
+                border-radius: 6px;
+                cursor: pointer;
+                border: none;
+                transition: 0.2s;
+            }}
+            .btn-micro-danger {{
+                background: rgba(239, 68, 68, 0.15);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.25);
+            }}
+            .btn-micro-danger:hover {{ background: rgba(239, 68, 68, 0.25); color: #fff; }}
+
+            .sub-link-row {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background: rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 10px;
+                padding: 6px 12px;
+                margin-bottom: 10px;
+            }}
+            .sub-url-text {{
+                font-family: ui-monospace, monospace;
+                font-size: 11px;
+                color: #38bdf8;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: 310px;
+            }}
+            .btn-open-link {{
+                color: #cbd5e1;
+                text-decoration: none;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: 6px;
+                background: rgba(255, 255, 255, 0.06);
+            }}
+            .btn-open-link:hover {{ background: rgba(255, 255, 255, 0.12); color: #fff; }}
+
+            .input-action-group {{
+                display: flex;
+                margin-bottom: 8px;
+            }}
+            .input-embedded {{
+                flex: 1;
+                border-top-right-radius: 0;
+                border-bottom-right-radius: 0;
+                border-right: none;
+                padding: 6px 10px;
+                font-size: 12px;
+            }}
+            .btn-embedded {{
+                background: #0284c7;
+                color: #fff;
+                border: none;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
+                padding: 0 12px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            }}
+
+            .vpn-attach-zone {{
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px dashed rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 10px 12px;
+                margin-top: 10px;
+            }}
+            .btn-upload-label {{
+                background: rgba(255, 255, 255, 0.06);
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 3px 8px;
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 600;
+                cursor: pointer;
+            }}
+            .btn-upload-label:hover {{ background: rgba(255, 255, 255, 0.12); color: #fff; }}
+            .btn-upload-label input[type="file"] {{ display: none; }}
+
+            .chips-container {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }}
+            .file-chip {{
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 3px 8px;
+                border-radius: 8px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }}
+            .file-chip-del {{
+                background: none;
+                border: none;
+                color: #64748b;
+                cursor: pointer;
+                padding: 0 2px;
+                font-size: 12px;
+            }}
+            .file-chip-del:hover {{ color: #ef4444; }}
+
+            .brand-field {{ margin-bottom: 16px; }}
+            .brand-field label {{
+                display: block;
+                font-size: 13px;
+                color: #94a3b8;
+                margin-bottom: 6px;
+                font-weight: 600;
+            }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header-bar">
-                <h1 style="margin:0; color:#38bdf8;">⚡ OOMKilled Portal <span style="font-size:16px; color:#a855f7;">v2.5</span></h1>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h2 style="margin:0; font-size:18px; color:#38bdf8; letter-spacing:-0.5px;">OOMKilled Portal <span style="font-size:12px; color:#94a3b8; font-weight:normal;">v2.6</span></h2>
+                </div>
                 <div class="actions">
-                    <a href="/backup" class="btn-backup" title="Скачать архив бэкапа">📥 Скачать Бэкап</a>
+                    <a href="/backup" class="btn-nav">📥 Скачать бэкап</a>
                     <form id="restore-form" action="/restore-backup" method="post" enctype="multipart/form-data" style="margin:0;">
-                        <label class="btn-restore-upload" title="Загрузить и восстановить архив бэкапа (.tar.gz)">
+                        <label class="btn-nav">
                             <input type="file" name="backup_file" accept=".tar.gz,.gz" onchange="submitRestore(this)">
-                            📤 Восстановить бэкап
+                            📤 Загрузить бэкап
                         </label>
                     </form>
-                    <a href="/logout" class="btn-logout">Выйти</a>
+                    <a href="/logout" class="btn-nav btn-logout">Выйти</a>
                 </div>
             </div>
 
             <div class="main-nav">
-                <button class="nav-tab active" onclick="switchNav('users', this)">👥 Пользователи</button>
-                <button class="nav-tab" onclick="switchNav('branding', this)">⚙️ Настройки страницы подписки</button>
+                <button class="nav-tab active" onclick="switchNav('users', this)">Пользователи</button>
+                <button class="nav-tab" onclick="switchNav('branding', this)">Кастомизация</button>
             </div>
 
             <div id="section-users" class="menu-section active">
-                <div class="grid">
-                    <div class="stat-box"><div>Всего пользователей</div><div class="stat-val">{len(users)}</div></div>
-                    <div class="stat-box"><div>SSL Сертификат</div><div class="stat-val" style="font-size:13px; margin-top:8px;">{ssl_status_badge}</div></div>
-                    <div class="stat-box"><div>Нагрузка CPU</div><div class="stat-val">{cpu_usage}%</div></div>
-                    <div class="stat-box"><div>Использование ОЗУ</div><div class="stat-val">{ram_usage}%</div></div>
+                <div class="grid-stats">
+                    <div class="stat-box">
+                        <div class="stat-title">Всего пользователей</div>
+                        <div class="stat-val">{len(users)}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">SSL Протокол</div>
+                        <div class="stat-val" style="font-size:15px; margin-top:8px;">{ssl_status_badge}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">Нагрузка CPU</div>
+                        <div class="stat-val">{cpu_usage}%</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">Оперативная память</div>
+                        <div class="stat-val">{ram_usage}%</div>
+                    </div>
                 </div>
 
                 <div class="panel">
-                    <h3 style="margin-top:0;">Создать пользователя</h3>
+                    <div class="panel-title">Добавить нового пользователя</div>
                     <form action="/add-user" method="post" class="form-grid">
-                        <input type="text" name="username" placeholder="Имя пользователя" required>
+                        <input type="text" name="username" placeholder="Имя профиля" required>
                         <select name="days">
                             <option value="0">Бессрочно</option>
                             <option value="7">7 дней</option>
@@ -1182,23 +1435,19 @@ def dashboard(user: str = Depends(auth_user)):
                             <option value="90">90 дней</option>
                             <option value="365">1 год</option>
                         </select>
-                        <input type="text" name="proxy_url" placeholder="Ссылка прокси (необязательно)">
-                        <button type="submit">+ Добавить</button>
+                        <input type="text" name="proxy_url" placeholder="Ссылка TG прокси (необязательно)">
+                        <button type="submit" class="btn-submit">+ Создать</button>
                     </form>
                 </div>
 
-                <div class="panel">
-                    <h3 style="margin-top:0;">Список пользователей, ссылки и файлы</h3>
+                <div class="users-container-grid">
                     {user_cards if user_cards else '<p style="color:#64748b;">Пользователи отсутствуют</p>'}
                 </div>
             </div>
 
             <div id="section-branding" class="menu-section">
                 <div class="panel">
-                    <h3 style="margin-top:0; color:#38bdf8;">Кастомизация страницы подписки</h3>
-                    <p style="color:#94a3b8; font-size:13px; margin-top:-5px; margin-bottom:20px;">
-                        Здесь настраивается персональная страница <code>/sub/token</code>, которую видят клиенты.
-                    </p>
+                    <div class="panel-title">Параметры страницы подписки (/sub)</div>
                     <form action="/save-branding" method="post">
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
                             <div class="brand-field">
@@ -1206,28 +1455,28 @@ def dashboard(user: str = Depends(auth_user)):
                                 <input type="text" name="service_name" value="{branding.get('service_name', '')}" style="width:100%;" required>
                             </div>
                             <div class="brand-field">
-                                <label>Ссылка на техподдержку (Telegram):</label>
-                                <input type="text" name="support_link" value="{branding.get('support_link', '')}" style="width:100%;" placeholder="https://t.me/your_support">
+                                <label>Ссылка на поддержку (Telegram):</label>
+                                <input type="text" name="support_link" value="{branding.get('support_link', '')}" style="width:100%;" placeholder="https://t.me/support">
                             </div>
                         </div>
 
-                        <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:15px; margin-bottom:20px;">
-                            <h4 style="margin:0 0 12px 0; color:#38bdf8;">📲 Ссылки на скачивание приложений для клиентов</h4>
+                        <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; margin-bottom:20px;">
+                            <div style="font-size:13px; font-weight:700; color:#38bdf8; margin-bottom:12px; text-transform:uppercase;">Кнопки приложений для клиентов</div>
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                                 <div class="brand-field" style="margin:0;">
-                                    <label>iOS (App Store / Happ / Streisand):</label>
+                                    <label>iOS (App Store):</label>
                                     <input type="text" name="app_ios" value="{branding.get('app_ios', '')}" placeholder="https://apps.apple.com/app/..." style="width:100%;">
                                 </div>
                                 <div class="brand-field" style="margin:0;">
-                                    <label>Android (Play Market / APK / v2rayNG):</label>
+                                    <label>Android (Play Market / APK):</label>
                                     <input type="text" name="app_android" value="{branding.get('app_android', '')}" placeholder="https://play.google.com/store/apps/..." style="width:100%;">
                                 </div>
                                 <div class="brand-field" style="margin:0;">
-                                    <label>Windows (EXE / MSI / GitHub):</label>
+                                    <label>Windows (EXE / ZIP):</label>
                                     <input type="text" name="app_windows" value="{branding.get('app_windows', '')}" placeholder="https://github.com/.../release.exe" style="width:100%;">
                                 </div>
                                 <div class="brand-field" style="margin:0;">
-                                    <label>macOS (DMG / App Store):</label>
+                                    <label>macOS (DMG):</label>
                                     <input type="text" name="app_macos" value="{branding.get('app_macos', '')}" placeholder="https://apps.apple.com/app/..." style="width:100%;">
                                 </div>
                             </div>
@@ -1238,18 +1487,18 @@ def dashboard(user: str = Depends(auth_user)):
                         </div>
 
                         <div class="brand-field">
-                            <label>Инструкция подключения для iOS:</label>
+                            <label>Инструкция для iOS:</label>
                             <textarea name="guide_ios" rows="3" style="width:100%;">{branding.get('guide_ios', '')}</textarea>
                         </div>
                         <div class="brand-field">
-                            <label>Инструкция подключения для Android:</label>
+                            <label>Инструкция для Android:</label>
                             <textarea name="guide_android" rows="3" style="width:100%;">{branding.get('guide_android', '')}</textarea>
                         </div>
                         <div class="brand-field">
-                            <label>Инструкция подключения для ПК (Desktop):</label>
+                            <label>Инструкция для Desktop (ПК):</label>
                             <textarea name="guide_desktop" rows="3" style="width:100%;">{branding.get('guide_desktop', '')}</textarea>
                         </div>
-                        <button type="submit" style="background:#10b981; margin-top:5px;">Сохранить параметры подписки</button>
+                        <button type="submit" class="btn-submit" style="background:#10b981;">Сохранить параметры</button>
                     </form>
                 </div>
             </div>
@@ -1265,7 +1514,7 @@ def dashboard(user: str = Depends(auth_user)):
 
             function submitRestore(input) {{
                 if (input.files && input.files[0]) {{
-                    if (confirm("Вы уверены, что хотите восстановить базу данных из этого файла? Текущие данные будут перезаписаны!")) {{
+                    if (confirm("Вы уверены, что хотите восстановить конфигурацию из архива? Текущая база пользователей будет заменена.")) {{
                         document.getElementById('restore-form').submit();
                     }} else {{
                         input.value = "";
