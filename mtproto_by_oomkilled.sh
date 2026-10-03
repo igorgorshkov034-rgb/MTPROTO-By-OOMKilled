@@ -3,12 +3,12 @@
 # Script Name : MTPROTO_By_OOMKilled
 # Description : Standalone Subscription & Config Portal By OOMKilled
 # Author      : OOMKilled
-# Version     : 2.6
+# Version     : 2.7
 # ==============================================================================
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.6"
+SCRIPT_VERSION="2.7"
 INSTALL_DIR="/opt/mtproto_by_oomkilled"
 WEB_SERVICE="/etc/systemd/system/mtproto-web.service"
 GUARDIAN_SERVICE="/etc/systemd/system/mtproto-guardian.service"
@@ -198,7 +198,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, F
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-app = FastAPI(title="OOMKilled Portal v2.6")
+app = FastAPI(title="OOMKilled Portal v2.7")
 security = HTTPBasic()
 
 DATA_PATH = "/opt/mtproto_by_oomkilled/users_meta.json"
@@ -219,6 +219,23 @@ def get_meta():
                     k, v = line.strip().split("=", 1)
                     meta[k] = v
     return meta
+
+def save_meta(meta_dict):
+    lines = []
+    if os.path.exists(META_PATH):
+        with open(META_PATH) as f:
+            for line in f:
+                if "=" in line:
+                    k = line.strip().split("=", 1)[0]
+                    if k in meta_dict:
+                        lines.append(f"{k}={meta_dict[k]}\n")
+                        del meta_dict[k]
+                    else:
+                        lines.append(line)
+    for k, v in meta_dict.items():
+        lines.append(f"{k}={v}\n")
+    with open(META_PATH, "w") as f:
+        f.writelines(lines)
 
 def get_users_meta():
     if os.path.exists(DATA_PATH):
@@ -377,6 +394,31 @@ body { background:#090d16; color:#f8fafc; font-family:system-ui, -apple-system, 
     <div class="spinner"></div>
     <p style="color:#94a3b8; font-size:14px;">Перезапуск сервисов... Перенаправление в панель управления через 3 секунды</p>
 </body></html>"""
+    )
+
+@app.post("/update-admin-credentials")
+def update_admin_credentials(
+    username: str = Form(...),
+    password: str = Form(...),
+    user: str = Depends(auth_user)
+):
+    username = username.strip()
+    password = password.strip()
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Логин и пароль не могут быть пустыми")
+
+    save_meta({"WEB_USER": username, "WEB_PASS": password})
+
+    return HTMLResponse(
+        content="""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><title>Пароль обновлен</title></head>
+<body style="background:#090d16; color:#f8fafc; font-family:system-ui, sans-serif; text-align:center; padding-top:80px;">
+    <h2 style="color:#10b981;">Данные администратора обновлены!</h2>
+    <p style="color:#94a3b8;">Пожалуйста, войдите снова, используя новые учетные данные.</p>
+    <p style="margin-top:24px;"><a href="/" style="color:#38bdf8; text-decoration:none; font-weight:600; padding:10px 20px; background:rgba(56,189,248,0.1); border-radius:8px; border:1px solid rgba(56,189,248,0.25);">Войти с новым паролем</a></p>
+</body></html>""",
+        status_code=200
     )
 
 @app.get("/sub/{token}/download/{filename}")
@@ -985,30 +1027,38 @@ def dashboard(user: str = Depends(auth_user)):
         sub_token = u_info.get("sub_token", "")
         sub_url = f"{protocol}://{host_address}:{web_port}/sub/{sub_token}"
 
+        created_at = u_info.get("created_at", now)
         exp = u_info.get("expires_at", 0)
         u_status = u_info.get("status", "active")
 
+        status_type = "active"
         if u_status == "paused":
+            status_type = "paused"
             exp_str = "<span style='color:#f59e0b;'>Пауза</span>"
             badge_dot = "#f59e0b"
             pause_btn_text = "Возобновить"
             pause_btn_style = "background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);"
+            days_sort_val = -1
+        elif exp > 0 and now > exp:
+            status_type = "expired"
+            exp_str = "<span style='color:#ef4444;'>Истёк</span>"
+            badge_dot = "#ef4444"
+            pause_btn_text = "Пауза"
+            pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
+            days_sort_val = 0
         elif exp == 0:
             exp_str = "<span style='color:#10b981;'>Бессрочно</span>"
             badge_dot = "#10b981"
             pause_btn_text = "Пауза"
             pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
-        elif now > exp:
-            exp_str = "<span style='color:#ef4444;'>Истёк</span>"
-            badge_dot = "#ef4444"
-            pause_btn_text = "Пауза"
-            pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
+            days_sort_val = 99999
         else:
             days_left = max(1, int((exp - now) / 86400))
             exp_str = f"<span style='color:#38bdf8;'>Осталось {days_left} дн.</span>"
             badge_dot = "#10b981"
             pause_btn_text = "Пауза"
             pause_btn_style = "background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);"
+            days_sort_val = days_left
 
         attached_files = list_user_vpn_files(u_name)
         files_chips = ""
@@ -1027,7 +1077,7 @@ def dashboard(user: str = Depends(auth_user)):
             """
 
         user_cards += f"""
-        <div class="user-card">
+        <div class="user-card" data-username="{u_name.lower()}" data-status="{status_type}" data-days="{days_sort_val}" data-created="{created_at}">
             <div class="user-header">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span style="width:8px; height:8px; border-radius:50%; background:{badge_dot}; display:inline-block;"></span>
@@ -1092,12 +1142,14 @@ def dashboard(user: str = Depends(auth_user)):
     else:
         ssl_status_badge = "<span style='color:#f59e0b;'>HTTP</span>"
 
+    admin_login = meta.get("WEB_USER", "admin")
+
     html = f"""<!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OOMKilled Portal v2.6</title>
+        <title>OOMKilled Portal v2.7</title>
         <link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
         <style>
             * {{ box-sizing: border-box; }}
@@ -1239,6 +1291,52 @@ def dashboard(user: str = Depends(auth_user)):
             }}
             .btn-submit:hover {{ background: #0284c7; }}
 
+            .controls-bar {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 18px;
+                background: rgba(0, 0, 0, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 10px 14px;
+                border-radius: 14px;
+            }}
+            .search-input {{
+                flex: 1;
+                min-width: 200px;
+                padding: 8px 12px;
+                font-size: 13px;
+                border-radius: 8px;
+            }}
+            .filters-group {{
+                display: flex;
+                gap: 6px;
+                align-items: center;
+            }}
+            .filter-btn {{
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: #94a3b8;
+                padding: 6px 12px;
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: 0.2s;
+            }}
+            .filter-btn.active {{
+                background: rgba(56, 189, 248, 0.15);
+                color: #38bdf8;
+                border-color: rgba(56, 189, 248, 0.3);
+            }}
+            .sort-select {{
+                padding: 6px 10px;
+                font-size: 12px;
+                border-radius: 8px;
+            }}
+
             .users-container-grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
@@ -1249,6 +1347,7 @@ def dashboard(user: str = Depends(auth_user)):
                 border: 1px solid rgba(255, 255, 255, 0.07);
                 border-radius: 16px;
                 padding: 18px;
+                transition: transform 0.2s, opacity 0.2s;
             }}
             .user-header {{
                 display: flex;
@@ -1385,7 +1484,7 @@ def dashboard(user: str = Depends(auth_user)):
         <div class="container">
             <div class="header-bar">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <h2 style="margin:0; font-size:18px; color:#38bdf8; letter-spacing:-0.5px;">OOMKilled Portal <span style="font-size:12px; color:#94a3b8; font-weight:normal;">v2.6</span></h2>
+                    <h2 style="margin:0; font-size:18px; color:#38bdf8; letter-spacing:-0.5px;">OOMKilled Portal <span style="font-size:12px; color:#94a3b8; font-weight:normal;">v2.7</span></h2>
                 </div>
                 <div class="actions">
                     <a href="/backup" class="btn-nav">📥 Скачать бэкап</a>
@@ -1402,6 +1501,7 @@ def dashboard(user: str = Depends(auth_user)):
             <div class="main-nav">
                 <button class="nav-tab active" onclick="switchNav('users', this)">Пользователи</button>
                 <button class="nav-tab" onclick="switchNav('branding', this)">Кастомизация</button>
+                <button class="nav-tab" onclick="switchNav('security', this)">Безопасность</button>
             </div>
 
             <div id="section-users" class="menu-section active">
@@ -1440,7 +1540,25 @@ def dashboard(user: str = Depends(auth_user)):
                     </form>
                 </div>
 
-                <div class="users-container-grid">
+                <div class="controls-bar">
+                    <input type="text" id="user-search" class="search-input" placeholder="🔍 Поиск по имени пользователя..." oninput="applyFilters()">
+                    
+                    <div class="filters-group">
+                        <button class="filter-btn active" onclick="setFilter('all', this)">Все</button>
+                        <button class="filter-btn" onclick="setFilter('active', this)">Активные</button>
+                        <button class="filter-btn" onclick="setFilter('paused', this)">Пауза</button>
+                        <button class="filter-btn" onclick="setFilter('expired', this)">Истёкшие</button>
+                    </div>
+
+                    <select id="user-sort" class="sort-select" onchange="applyFilters()">
+                        <option value="name_asc">По имени (А-Я)</option>
+                        <option value="name_desc">По имени (Я-А)</option>
+                        <option value="created_desc">Сначала новые</option>
+                        <option value="days_asc">Сначала истекающие</option>
+                    </select>
+                </div>
+
+                <div class="users-container-grid" id="users-grid">
                     {user_cards if user_cards else '<p style="color:#64748b;">Пользователи отсутствуют</p>'}
                 </div>
             </div>
@@ -1502,9 +1620,31 @@ def dashboard(user: str = Depends(auth_user)):
                     </form>
                 </div>
             </div>
+
+            <div id="section-security" class="menu-section">
+                <div class="panel" style="max-width:560px;">
+                    <div class="panel-title">Смена данных учетной записи администратора</div>
+                    <p style="color:#94a3b8; font-size:13px; margin-top:-5px; margin-bottom:20px;">
+                        После смены пароля браузер запросит повторный вход в панель.
+                    </p>
+                    <form action="/update-admin-credentials" method="post">
+                        <div class="brand-field">
+                            <label>Логин администратора:</label>
+                            <input type="text" name="username" value="{admin_login}" style="width:100%;" required>
+                        </div>
+                        <div class="brand-field">
+                            <label>Новый пароль:</label>
+                            <input type="password" name="password" placeholder="Введите новый надежный пароль" style="width:100%;" required>
+                        </div>
+                        <button type="submit" class="btn-submit" style="background:#0ea5e9; width:100%; margin-top:8px;">Обновить логин и пароль</button>
+                    </form>
+                </div>
+            </div>
         </div>
 
         <script>
+            let currentStatusFilter = 'all';
+
             function switchNav(sec, btn) {{
                 document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.menu-section').forEach(s => s.classList.remove('active'));
@@ -1520,6 +1660,51 @@ def dashboard(user: str = Depends(auth_user)):
                         input.value = "";
                     }}
                 }}
+            }}
+
+            function setFilter(status, btn) {{
+                currentStatusFilter = status;
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                applyFilters();
+            }}
+
+            function applyFilters() {{
+                const query = document.getElementById('user-search').value.toLowerCase().trim();
+                const sortType = document.getElementById('user-sort').value;
+                const grid = document.getElementById('users-grid');
+                const cards = Array.from(grid.querySelectorAll('.user-card'));
+
+                cards.forEach(card => {{
+                    const uName = card.getAttribute('data-username') || '';
+                    const uStatus = card.getAttribute('data-status') || '';
+
+                    const matchesSearch = uName.includes(query);
+                    const matchesFilter = (currentStatusFilter === 'all') || (uStatus === currentStatusFilter);
+
+                    if (matchesSearch && matchesFilter) {{
+                        card.style.display = 'block';
+                    }} else {{
+                        card.style.display = 'none';
+                    }}
+                }});
+
+                cards.sort((a, b) => {{
+                    const nameA = a.getAttribute('data-username') || '';
+                    const nameB = b.getAttribute('data-username') || '';
+                    const daysA = parseInt(a.getAttribute('data-days') || '0', 10);
+                    const daysB = parseInt(b.getAttribute('data-days') || '0', 10);
+                    const createdA = parseInt(a.getAttribute('data-created') || '0', 10);
+                    const createdB = parseInt(b.getAttribute('data-created') || '0', 10);
+
+                    if (sortType === 'name_asc') return nameA.localeCompare(nameB);
+                    if (sortType === 'name_desc') return nameB.localeCompare(nameA);
+                    if (sortType === 'created_desc') return createdB - createdA;
+                    if (sortType === 'days_asc') return daysA - daysB;
+                    return 0;
+                }});
+
+                cards.forEach(card => grid.appendChild(card));
             }}
         </script>
     </body>
